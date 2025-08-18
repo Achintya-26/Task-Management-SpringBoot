@@ -129,14 +129,14 @@ public class ActivityService {
     }
 
     public List<ActivityDTO> getAllActivities() {
-        return activityRepository.findAll()
+        return activityRepository.findAllWithCreator()
                 .stream()
                 .map(this::convertToDTO)
                 .collect(Collectors.toList());
     }
 
     public ActivityDTO getActivityById(Long id) {
-        Activity activity = activityRepository.findById(id)
+        Activity activity = activityRepository.findByIdWithCreator(id)
                 .orElseThrow(() -> new RuntimeException("Activity not found with ID: " + id));
         return convertToDTO(activity);
     }
@@ -145,7 +145,7 @@ public class ActivityService {
         teamRepository.findById(teamId)
                 .orElseThrow(() -> new RuntimeException("Team not found with ID: " + teamId));
         
-        List<Activity> activities = activityRepository.findByTeamId(teamId);
+        List<Activity> activities = activityRepository.findByTeamIdWithCreator(teamId);
         return activities.stream()
                 .map(this::convertToDTO)
                 .collect(Collectors.toList());

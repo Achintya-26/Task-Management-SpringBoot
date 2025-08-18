@@ -1,5 +1,6 @@
 package com.taskmanagement.dto;
 
+import com.fasterxml.jackson.annotation.JsonProperty;
 import java.time.LocalDateTime;
 import java.util.List;
 
@@ -67,6 +68,8 @@ public class ActivityDTO {
 
     public String getCreatorName() { return creatorName; }
     public void setCreatorName(String creatorName) { this.creatorName = creatorName; }
+    
+    // public String getCreatedByName() { return creatorName; }
 
     public String getCreatorEmpId() { return creatorEmpId; }
     public void setCreatorEmpId(String creatorEmpId) { this.creatorEmpId = creatorEmpId; }

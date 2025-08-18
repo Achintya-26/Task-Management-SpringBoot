@@ -13,8 +13,7 @@ import org.springframework.stereotype.Repository;
 @Repository
 public interface ActivityRepository extends JpaRepository<Activity, Long> {
 
-	
-	List<Activity> findByTeamId(Long teamId);
+    List<Activity> findByTeamId(Long teamId);
     
     /**
      * Find activities created by a specific user
@@ -26,4 +25,22 @@ public interface ActivityRepository extends JpaRepository<Activity, Long> {
      */
     @Query("SELECT a FROM Activity a WHERE a.team.id = :teamId ORDER BY a.createdAt DESC")
     List<Activity> findByTeamIdOrderByCreatedAtDesc(@Param("teamId") Long teamId);
+    
+    /**
+     * Find activity by ID with creator information eagerly loaded
+     */
+    @Query("SELECT a FROM Activity a LEFT JOIN FETCH a.creator LEFT JOIN FETCH a.team LEFT JOIN FETCH a.assignedMembers WHERE a.id = :id")
+    Optional<Activity> findByIdWithCreator(@Param("id") Long id);
+    
+    /**
+     * Find all activities with creator information eagerly loaded
+     */
+    @Query("SELECT a FROM Activity a LEFT JOIN FETCH a.creator LEFT JOIN FETCH a.team LEFT JOIN FETCH a.assignedMembers ORDER BY a.createdAt DESC")
+    List<Activity> findAllWithCreator();
+    
+    /**
+     * Find activities by team ID with creator information eagerly loaded
+     */
+    @Query("SELECT a FROM Activity a LEFT JOIN FETCH a.creator LEFT JOIN FETCH a.team LEFT JOIN FETCH a.assignedMembers WHERE a.team.id = :teamId ORDER BY a.createdAt DESC")
+    List<Activity> findByTeamIdWithCreator(@Param("teamId") Long teamId);
 }
