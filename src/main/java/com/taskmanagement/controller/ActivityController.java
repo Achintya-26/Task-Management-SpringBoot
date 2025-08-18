@@ -3,10 +3,18 @@ package com.taskmanagement.controller;
 import com.taskmanagement.dto.*;
 import com.taskmanagement.service.ActivityService;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.core.io.Resource;
+import org.springframework.core.io.UrlResource;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
 
 import javax.servlet.http.HttpServletRequest;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -83,6 +91,55 @@ public class ActivityController {
             System.err.println("Create activity error: " + error.getMessage());
             Map<String, Object> errorResponse = new HashMap<>();
             errorResponse.put("message", "Error creating activity: " + error.getMessage());
+            return ResponseEntity.status(500).body(errorResponse);
+        }
+    }
+
+    @PostMapping(consumes = "multipart/form-data")
+    public ResponseEntity<Map<String, Object>> createActivityWithFiles(
+            @RequestParam("name") String name,
+            @RequestParam("description") String description,
+            @RequestParam("priority") String priority,
+            @RequestParam("team_id") Long teamId,
+            @RequestParam(value = "targetDate", required = false) String targetDate,
+            @RequestParam(value = "assignedUsers", required = false) String assignedUsersJson,
+            @RequestParam(value = "links", required = false) String linksJson,
+            @RequestParam(value = "attachments", required = false) MultipartFile[] attachments,
+            HttpServletRequest httpRequest) {
+        try {
+            String authHeader = httpRequest.getHeader("Authorization");
+            if (authHeader == null || !authHeader.startsWith("Bearer ")) {
+                Map<String, Object> errorResponse = new HashMap<>();
+                errorResponse.put("message", "Authentication required");
+                return ResponseEntity.status(401).body(errorResponse);
+            }
+            
+            String token = authHeader.substring(7);
+            
+            // Create request object
+            CreateActivityWithFilesRequest request = new CreateActivityWithFilesRequest();
+            request.setName(name);
+            request.setDescription(description);
+            request.setPriority(priority);
+            request.setTeamId(teamId);
+            request.setTargetDate(targetDate);
+            request.setAssignedUsersJson(assignedUsersJson);
+            request.setLinksJson(linksJson);
+            request.setAttachments(attachments);
+            
+            ActivityDTO activity = activityService.createActivityWithFiles(request, token);
+            
+            Map<String, Object> response = new HashMap<>();
+            response.put("message", "Activity created successfully with attachments");
+            response.put("activity", activity);
+            
+            return ResponseEntity.ok(response);
+            
+        } catch (Exception error) {
+            System.err.println("Create activity with files error: " + error.getMessage());
+            error.printStackTrace();
+            Map<String, Object> errorResponse = new HashMap<>();
+            errorResponse.put("message", "Error creating activity with files: " + error.getMessage());
             return ResponseEntity.status(500).body(errorResponse);
         }
     }
@@ -190,6 +247,29 @@ public class ActivityController {
             return ResponseEntity.status(500).build();
         } catch (Exception error) {
             System.err.println("Get remarks error: " + error.getMessage());
+            return ResponseEntity.status(500).build();
+        }
+    }
+
+    @Value("${app.upload.dir:uploads}")
+    private String uploadDir;
+
+    @GetMapping("/files/{filename}")
+    public ResponseEntity<Resource> downloadFile(@PathVariable String filename) {
+        try {
+            Path filePath = Paths.get(uploadDir).resolve(filename).normalize();
+            Resource resource = new UrlResource(filePath.toUri());
+
+            if (resource.exists()) {
+                return ResponseEntity.ok()
+                        .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + filename + "\"")
+                        .contentType(MediaType.APPLICATION_OCTET_STREAM)
+                        .body(resource);
+            } else {
+                return ResponseEntity.notFound().build();
+            }
+        } catch (Exception e) {
+            System.err.println("Error downloading file: " + e.getMessage());
             return ResponseEntity.status(500).build();
         }
     }

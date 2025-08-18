@@ -28,6 +28,12 @@ public class ActivityDTO {
     
     // Remarks
     private List<RemarkDTO> remarks;
+    
+    // Attachments
+    private List<AttachmentDTO> attachments;
+    
+    // Links
+    private List<ActivityLinkDTO> links;
 
     // Constructors
     public ActivityDTO() {}
@@ -80,6 +86,12 @@ public class ActivityDTO {
     public List<RemarkDTO> getRemarks() { return remarks; }
     public void setRemarks(List<RemarkDTO> remarks) { this.remarks = remarks; }
 
+    public List<AttachmentDTO> getAttachments() { return attachments; }
+    public void setAttachments(List<AttachmentDTO> attachments) { this.attachments = attachments; }
+
+    public List<ActivityLinkDTO> getLinks() { return links; }
+    public void setLinks(List<ActivityLinkDTO> links) { this.links = links; }
+
     // Inner class for assigned members
     public static class AssignedMemberDTO {
         private Long id;
@@ -102,5 +114,79 @@ public class ActivityDTO {
 
         public String getEmpId() { return empId; }
         public void setEmpId(String empId) { this.empId = empId; }
+    }
+
+    // Inner class for attachments
+    public static class AttachmentDTO {
+        private Long id;
+        private String filename;
+        private String originalName;
+        private String filePath;
+        private Long fileSize;
+        private String contentType;
+        private LocalDateTime uploadedAt;
+
+        public AttachmentDTO() {}
+
+        public AttachmentDTO(Long id, String filename, String originalName, String filePath, 
+                           Long fileSize, String contentType, LocalDateTime uploadedAt) {
+            this.id = id;
+            this.filename = filename;
+            this.originalName = originalName;
+            this.filePath = filePath;
+            this.fileSize = fileSize;
+            this.contentType = contentType;
+            this.uploadedAt = uploadedAt;
+        }
+
+        public Long getId() { return id; }
+        public void setId(Long id) { this.id = id; }
+
+        public String getFilename() { return filename; }
+        public void setFilename(String filename) { this.filename = filename; }
+
+        public String getOriginalName() { return originalName; }
+        public void setOriginalName(String originalName) { this.originalName = originalName; }
+
+        public String getFilePath() { return filePath; }
+        public void setFilePath(String filePath) { this.filePath = filePath; }
+
+        public Long getFileSize() { return fileSize; }
+        public void setFileSize(Long fileSize) { this.fileSize = fileSize; }
+
+        public String getContentType() { return contentType; }
+        public void setContentType(String contentType) { this.contentType = contentType; }
+
+        public LocalDateTime getUploadedAt() { return uploadedAt; }
+        public void setUploadedAt(LocalDateTime uploadedAt) { this.uploadedAt = uploadedAt; }
+    }
+
+    // Inner class for activity links
+    public static class ActivityLinkDTO {
+        private Long id;
+        private String url;
+        private String title;
+        private LocalDateTime createdAt;
+
+        public ActivityLinkDTO() {}
+
+        public ActivityLinkDTO(Long id, String url, String title, LocalDateTime createdAt) {
+            this.id = id;
+            this.url = url;
+            this.title = title;
+            this.createdAt = createdAt;
+        }
+
+        public Long getId() { return id; }
+        public void setId(Long id) { this.id = id; }
+
+        public String getUrl() { return url; }
+        public void setUrl(String url) { this.url = url; }
+
+        public String getTitle() { return title; }
+        public void setTitle(String title) { this.title = title; }
+
+        public LocalDateTime getCreatedAt() { return createdAt; }
+        public void setCreatedAt(LocalDateTime createdAt) { this.createdAt = createdAt; }
     }
 }

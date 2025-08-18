@@ -2,6 +2,7 @@ package com.taskmanagement.service;
 
 import com.taskmanagement.dto.ActivityDTO;
 import com.taskmanagement.dto.CreateActivityRequest;
+import com.taskmanagement.dto.CreateActivityWithFilesRequest;
 import com.taskmanagement.dto.UpdateActivityStatusRequest;
 import com.taskmanagement.dto.AddRemarkRequest;
 import com.taskmanagement.dto.RemarkDTO;
@@ -9,20 +10,35 @@ import com.taskmanagement.model.Activity;
 import com.taskmanagement.model.Team;
 import com.taskmanagement.model.User;
 import com.taskmanagement.model.Remark;
+import com.taskmanagement.model.Attachment;
+import com.taskmanagement.model.ActivityLink;
 import com.taskmanagement.repository.ActivityRepository;
 import com.taskmanagement.repository.TeamRepository;
 import com.taskmanagement.repository.UserRepository;
 import com.taskmanagement.repository.RemarkRepository;
+import com.taskmanagement.repository.AttachmentRepository;
+import com.taskmanagement.repository.ActivityLinkRepository;
 import com.taskmanagement.util.JwtUtil;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
+import org.springframework.web.multipart.MultipartFile;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.core.type.TypeReference;
 
 import javax.transaction.Transactional;
+import java.io.File;
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.nio.file.StandardCopyOption;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.UUID;
 import java.util.stream.Collectors;
 
 @Service
@@ -41,7 +57,16 @@ public class ActivityService {
     private RemarkRepository remarkRepository;
 
     @Autowired
+    private AttachmentRepository attachmentRepository;
+
+    @Autowired
+    private ActivityLinkRepository activityLinkRepository;
+
+    @Autowired
     private JwtUtil jwtUtil;
+
+    @Value("${upload.dir:uploads}")
+    private String uploadDir;
 
     // Convert Remark entity to DTO
     private RemarkDTO convertRemarkToDTO(Remark remark) {
@@ -125,6 +150,45 @@ public class ActivityService {
             System.err.println("Could not load remarks: " + e.getMessage());
         }
         
+        // Convert attachments
+        try {
+            if (activity.getAttachments() != null && !activity.getAttachments().isEmpty()) {
+                List<ActivityDTO.AttachmentDTO> attachmentDTOs = activity.getAttachments()
+                    .stream()
+                    .map(attachment -> new ActivityDTO.AttachmentDTO(
+                        attachment.getId(),
+                        attachment.getFilename(),
+                        attachment.getOriginalName(),
+                        attachment.getFilePath(),
+                        attachment.getFileSize(),
+                        attachment.getContentType(),
+                        attachment.getUploadedAt()
+                    ))
+                    .collect(Collectors.toList());
+                dto.setAttachments(attachmentDTOs);
+            }
+        } catch (Exception e) {
+            System.err.println("Could not load attachments: " + e.getMessage());
+        }
+        
+        // Convert links
+        try {
+            if (activity.getLinks() != null && !activity.getLinks().isEmpty()) {
+                List<ActivityDTO.ActivityLinkDTO> linkDTOs = activity.getLinks()
+                    .stream()
+                    .map(link -> new ActivityDTO.ActivityLinkDTO(
+                        link.getId(),
+                        link.getUrl(),
+                        link.getTitle(),
+                        link.getCreatedAt()
+                    ))
+                    .collect(Collectors.toList());
+                dto.setLinks(linkDTOs);
+            }
+        } catch (Exception e) {
+            System.err.println("Could not load links: " + e.getMessage());
+        }
+        
         return dto;
     }
 
@@ -196,6 +260,138 @@ public class ActivityService {
 
         Activity savedActivity = activityRepository.save(activity);
         return convertToDTO(savedActivity);
+    }
+
+    @Transactional
+    public ActivityDTO createActivityWithFiles(CreateActivityWithFilesRequest request, String token) {
+        Long currentUserId = jwtUtil.extractUserId(token);
+        if (currentUserId == null) {
+            throw new RuntimeException("Invalid authentication token");
+        }
+
+        Team team = teamRepository.findById(request.getTeamId())
+                .orElseThrow(() -> new RuntimeException("Team not found with ID: " + request.getTeamId()));
+
+        // Create the activity
+        Activity activity = new Activity();
+        activity.setName(request.getName());
+        activity.setDescription(request.getDescription());
+        activity.setPriority(request.getPriority());
+        activity.setTeam(team);
+        activity.setCreatedBy(currentUserId);
+        activity.setStatus(Activity.ActivityStatus.PENDING);
+        
+        LocalDateTime now = LocalDateTime.now();
+        activity.setCreatedAt(now);
+        activity.setUpdatedAt(now);
+        
+        // Parse and set target date
+        if (request.getTargetDate() != null && !request.getTargetDate().isEmpty()) {
+            try {
+                LocalDateTime targetDate = LocalDateTime.parse(request.getTargetDate(), 
+                    DateTimeFormatter.ISO_DATE_TIME);
+                activity.setTargetDate(targetDate);
+            } catch (Exception e) {
+                System.err.println("Error parsing target date: " + e.getMessage());
+            }
+        }
+
+        // Parse and set assigned users
+        if (request.getAssignedUsersJson() != null && !request.getAssignedUsersJson().isEmpty()) {
+            try {
+                ObjectMapper objectMapper = new ObjectMapper();
+                List<Long> assignedUserIds = objectMapper.readValue(
+                    request.getAssignedUsersJson(), 
+                    new TypeReference<List<Long>>(){}
+                );
+                
+                Set<User> assignedUsers = new HashSet<>();
+                for (Long userId : assignedUserIds) {
+                    User user = userRepository.findById(userId).orElse(null);
+                    if (user != null) {
+                        assignedUsers.add(user);
+                    }
+                }
+                activity.setAssignedMembers(assignedUsers);
+            } catch (Exception e) {
+                System.err.println("Error parsing assigned users: " + e.getMessage());
+            }
+        }
+
+        // Save the activity first to get its ID
+        Activity savedActivity = activityRepository.save(activity);
+
+        // Handle file uploads
+        if (request.getAttachments() != null && request.getAttachments().length > 0) {
+            for (MultipartFile file : request.getAttachments()) {
+                if (!file.isEmpty()) {
+                    try {
+                        String savedFile = saveFile(file);
+                        if (savedFile != null) {
+                            Attachment attachment = new Attachment();
+                            attachment.setFilename(savedFile);
+                            attachment.setOriginalName(file.getOriginalFilename());
+                            attachment.setFilePath(uploadDir + "/" + savedFile);
+                            attachment.setFileSize(file.getSize());
+                            attachment.setContentType(file.getContentType());
+                            attachment.setActivity(savedActivity);
+                            
+                            attachmentRepository.save(attachment);
+                        }
+                    } catch (IOException e) {
+                        System.err.println("Error saving file " + file.getOriginalFilename() + ": " + e.getMessage());
+                    }
+                }
+            }
+        }
+
+        // Handle links
+        if (request.getLinksJson() != null && !request.getLinksJson().isEmpty()) {
+            try {
+                ObjectMapper objectMapper = new ObjectMapper();
+                List<String> links = objectMapper.readValue(
+                    request.getLinksJson(), 
+                    new TypeReference<List<String>>(){}
+                );
+                
+                for (String url : links) {
+                    if (url != null && !url.trim().isEmpty()) {
+                        ActivityLink link = new ActivityLink();
+                        link.setUrl(url);
+                        link.setActivity(savedActivity);
+                        
+                        activityLinkRepository.save(link);
+                    }
+                }
+            } catch (Exception e) {
+                System.err.println("Error parsing links: " + e.getMessage());
+            }
+        }
+
+        // Return the activity with all its relationships loaded
+        return convertToDTO(activityRepository.findById(savedActivity.getId()).orElse(savedActivity));
+    }
+
+    private String saveFile(MultipartFile file) throws IOException {
+        // Create upload directory if it doesn't exist
+        Path uploadPath = Paths.get(uploadDir);
+        if (!Files.exists(uploadPath)) {
+            Files.createDirectories(uploadPath);
+        }
+
+        // Generate unique filename
+        String originalFilename = file.getOriginalFilename();
+        String fileExtension = "";
+        if (originalFilename != null && originalFilename.contains(".")) {
+            fileExtension = originalFilename.substring(originalFilename.lastIndexOf("."));
+        }
+        String uniqueFilename = UUID.randomUUID().toString() + fileExtension;
+
+        // Save file
+        Path filePath = uploadPath.resolve(uniqueFilename);
+        Files.copy(file.getInputStream(), filePath, StandardCopyOption.REPLACE_EXISTING);
+
+        return uniqueFilename;
     }
 
     @Transactional

@@ -29,18 +29,18 @@ public interface ActivityRepository extends JpaRepository<Activity, Long> {
     /**
      * Find activity by ID with creator information eagerly loaded
      */
-    @Query("SELECT a FROM Activity a LEFT JOIN FETCH a.creator LEFT JOIN FETCH a.team LEFT JOIN FETCH a.assignedMembers WHERE a.id = :id")
+    @Query("SELECT a FROM Activity a LEFT JOIN FETCH a.creator LEFT JOIN FETCH a.team LEFT JOIN FETCH a.assignedMembers LEFT JOIN FETCH a.attachments LEFT JOIN FETCH a.links WHERE a.id = :id")
     Optional<Activity> findByIdWithCreator(@Param("id") Long id);
     
     /**
      * Find all activities with creator information eagerly loaded
      */
-    @Query("SELECT a FROM Activity a LEFT JOIN FETCH a.creator LEFT JOIN FETCH a.team LEFT JOIN FETCH a.assignedMembers ORDER BY a.createdAt DESC")
+    @Query("SELECT a FROM Activity a LEFT JOIN FETCH a.creator LEFT JOIN FETCH a.team LEFT JOIN FETCH a.assignedMembers LEFT JOIN FETCH a.attachments LEFT JOIN FETCH a.links ORDER BY a.createdAt DESC")
     List<Activity> findAllWithCreator();
     
     /**
      * Find activities by team ID with creator information eagerly loaded
      */
-    @Query("SELECT a FROM Activity a LEFT JOIN FETCH a.creator LEFT JOIN FETCH a.team LEFT JOIN FETCH a.assignedMembers WHERE a.team.id = :teamId ORDER BY a.createdAt DESC")
+    @Query("SELECT a FROM Activity a LEFT JOIN FETCH a.creator LEFT JOIN FETCH a.team LEFT JOIN FETCH a.assignedMembers LEFT JOIN FETCH a.attachments LEFT JOIN FETCH a.links WHERE a.team.id = :teamId ORDER BY a.createdAt DESC")
     List<Activity> findByTeamIdWithCreator(@Param("teamId") Long teamId);
 }

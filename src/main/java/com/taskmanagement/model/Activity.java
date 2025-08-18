@@ -66,6 +66,14 @@ public class Activity {
     )
     @JsonIgnoreProperties({"hibernateLazyInitializer", "handler", "password"})
     private Set<User> assignedMembers = new HashSet<>();
+
+    @OneToMany(mappedBy = "activity", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
+    @JsonIgnoreProperties({"hibernateLazyInitializer", "handler", "activity"})
+    private Set<Attachment> attachments = new HashSet<>();
+
+    @OneToMany(mappedBy = "activity", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
+    @JsonIgnoreProperties({"hibernateLazyInitializer", "handler", "activity"})
+    private Set<ActivityLink> links = new HashSet<>();
     
     public enum ActivityStatus {
         PENDING("pending"),
@@ -220,5 +228,21 @@ public class Activity {
 
     public void setAssignedMembers(Set<User> assignedMembers) {
         this.assignedMembers = assignedMembers;
+    }
+
+    public Set<Attachment> getAttachments() {
+        return attachments;
+    }
+
+    public void setAttachments(Set<Attachment> attachments) {
+        this.attachments = attachments;
+    }
+
+    public Set<ActivityLink> getLinks() {
+        return links;
+    }
+
+    public void setLinks(Set<ActivityLink> links) {
+        this.links = links;
     }
 }
