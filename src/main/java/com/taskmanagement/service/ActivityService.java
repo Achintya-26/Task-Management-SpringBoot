@@ -3,6 +3,7 @@ package com.taskmanagement.service;
 import com.taskmanagement.dto.ActivityDTO;
 import com.taskmanagement.dto.CreateActivityRequest;
 import com.taskmanagement.dto.CreateActivityWithFilesRequest;
+import com.taskmanagement.dto.UpdateActivityWithFilesRequest;
 import com.taskmanagement.dto.UpdateActivityStatusRequest;
 import com.taskmanagement.dto.AddRemarkRequest;
 import com.taskmanagement.dto.RemarkDTO;
@@ -27,6 +28,8 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.core.type.TypeReference;
 
 import javax.transaction.Transactional;
+import javax.persistence.EntityManager;
+import javax.persistence.PersistenceContext;
 import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
@@ -64,6 +67,9 @@ public class ActivityService {
 
     @Autowired
     private JwtUtil jwtUtil;
+
+    @PersistenceContext
+    private EntityManager entityManager;
 
     @Value("${upload.dir:uploads}")
     private String uploadDir;
@@ -482,6 +488,222 @@ public class ActivityService {
         return remarks.stream()
                 .map(this::convertRemarkToDTO)
                 .collect(Collectors.toList());
+    }
+
+    @Transactional
+    public ActivityDTO updateActivityWithFiles(Long activityId, UpdateActivityWithFilesRequest request, String token) {
+        Long currentUserId = jwtUtil.extractUserId(token);
+        if (currentUserId == null) {
+            throw new RuntimeException("Invalid token");
+        }
+
+        // Get the existing activity
+        Activity activity = activityRepository.findById(activityId)
+            .orElseThrow(() -> new RuntimeException("Activity not found"));
+
+        // Check if user is the creator or admin
+        User currentUser = userRepository.findById(currentUserId)
+            .orElseThrow(() -> new RuntimeException("User not found"));
+        
+        if (!currentUser.getRole().equals("admin") && !activity.getCreatedBy().equals(currentUserId)) {
+            throw new RuntimeException("You are not authorized to edit this activity");
+        }
+
+        // Update basic fields
+        activity.setName(request.getName());
+        activity.setDescription(request.getDescription());
+        activity.setPriority(request.getPriority());
+        activity.setUpdatedAt(LocalDateTime.now());
+
+        if (request.getTargetDate() != null && !request.getTargetDate().isEmpty()) {
+            try {
+                LocalDateTime targetDate = LocalDateTime.parse(request.getTargetDate(), DateTimeFormatter.ISO_DATE_TIME);
+                activity.setTargetDate(targetDate);
+            } catch (Exception e) {
+                System.err.println("Error parsing target date: " + e.getMessage());
+            }
+        }
+
+        // Update assigned members
+        if (request.getAssignedUsersJson() != null && !request.getAssignedUsersJson().isEmpty()) {
+            try {
+                ObjectMapper objectMapper = new ObjectMapper();
+                List<Long> assignedUserIds = objectMapper.readValue(
+                    request.getAssignedUsersJson(), 
+                    new TypeReference<List<Long>>(){}
+                );
+                
+                Set<User> assignedUsers = new HashSet<>();
+                for (Long userId : assignedUserIds) {
+                    User user = userRepository.findById(userId).orElse(null);
+                    if (user != null) {
+                        assignedUsers.add(user);
+                    }
+                }
+                activity.setAssignedMembers(assignedUsers);
+            } catch (Exception e) {
+                System.err.println("Error parsing assigned users: " + e.getMessage());
+            }
+        }
+
+        // Handle attachment deletions
+        System.out.println("=== SERVICE DEBUG ===");
+        System.out.println("attachmentsToDeleteJson: " + request.getAttachmentsToDeleteJson());
+        System.out.println("linksToDeleteJson: " + request.getLinksToDeleteJson());
+        
+        if (request.getAttachmentsToDeleteJson() != null && !request.getAttachmentsToDeleteJson().isEmpty()) {
+            try {
+                ObjectMapper objectMapper = new ObjectMapper();
+                List<Long> attachmentIds = objectMapper.readValue(
+                    request.getAttachmentsToDeleteJson(), 
+                    new TypeReference<List<Long>>(){}
+                );
+                
+                System.out.println("Parsed attachment IDs to delete: " + attachmentIds);
+                
+                for (Long attachmentId : attachmentIds) {
+                    System.out.println("Deleting attachment with ID: " + attachmentId);
+                    
+                    // First check if the attachment exists
+                    boolean exists = attachmentRepository.existsById(attachmentId);
+                    System.out.println("Attachment exists before deletion: " + exists);
+                    
+                    if (exists) {
+                        // Try to find the attachment first to get more info
+                        Attachment attachment = attachmentRepository.findById(attachmentId).orElse(null);
+                        if (attachment != null) {
+                            System.out.println("Found attachment: " + attachment.getFilename() + " for activity: " + attachment.getActivity().getId());
+                            
+                            // Remove the attachment from the activity's collection first
+                            Activity attachmentActivity = attachment.getActivity();
+                            if (attachmentActivity != null && attachmentActivity.getAttachments() != null) {
+                                attachmentActivity.getAttachments().remove(attachment);
+                                System.out.println("Removed attachment from activity's collection");
+                            }
+                        }
+                        
+                        // Delete the attachment
+                        attachmentRepository.deleteById(attachmentId);
+                        
+                        // Check if it was actually deleted
+                        boolean existsAfter = attachmentRepository.existsById(attachmentId);
+                        System.out.println("Attachment exists after deletion: " + existsAfter);
+                    } else {
+                        System.out.println("Attachment with ID " + attachmentId + " does not exist");
+                    }
+                }
+            } catch (Exception e) {
+                System.err.println("Error deleting attachments: " + e.getMessage());
+                e.printStackTrace();
+            }
+        } else {
+            System.out.println("No attachments to delete");
+        }
+        
+        // Flush to ensure deletions are persisted
+        entityManager.flush();
+
+        // Handle link deletions
+        if (request.getLinksToDeleteJson() != null && !request.getLinksToDeleteJson().isEmpty()) {
+            try {
+                ObjectMapper objectMapper = new ObjectMapper();
+                List<Long> linkIds = objectMapper.readValue(
+                    request.getLinksToDeleteJson(), 
+                    new TypeReference<List<Long>>(){}
+                );
+                
+                System.out.println("Parsed link IDs to delete: " + linkIds);
+                
+                for (Long linkId : linkIds) {
+                    System.out.println("Deleting link with ID: " + linkId);
+                    
+                    // First check if the link exists
+                    boolean exists = activityLinkRepository.existsById(linkId);
+                    System.out.println("Link exists before deletion: " + exists);
+                    
+                    if (exists) {
+                        // Try to find the link first to get more info
+                        ActivityLink link = activityLinkRepository.findById(linkId).orElse(null);
+                        if (link != null) {
+                            System.out.println("Found link: " + link.getUrl() + " for activity: " + link.getActivity().getId());
+                            
+                            // Remove the link from the activity's collection first
+                            Activity linkActivity = link.getActivity();
+                            if (linkActivity != null && linkActivity.getLinks() != null) {
+                                linkActivity.getLinks().remove(link);
+                                System.out.println("Removed link from activity's collection");
+                            }
+                        }
+                        
+                        // Delete the link
+                        activityLinkRepository.deleteById(linkId);
+                        
+                        // Check if it was actually deleted
+                        boolean existsAfter = activityLinkRepository.existsById(linkId);
+                        System.out.println("Link exists after deletion: " + existsAfter);
+                    } else {
+                        System.out.println("Link with ID " + linkId + " does not exist");
+                    }
+                }
+            } catch (Exception e) {
+                System.err.println("Error deleting links: " + e.getMessage());
+                e.printStackTrace();
+            }
+        } else {
+            System.out.println("No links to delete");
+        }
+        
+        // Flush to ensure deletions are persisted
+        entityManager.flush();
+        
+        System.out.println("==================");
+
+        // Handle new file uploads
+        if (request.getAttachments() != null && request.getAttachments().length > 0) {
+            for (MultipartFile file : request.getAttachments()) {
+                if (!file.isEmpty()) {
+                    try {
+                        String savedFile = saveFile(file);
+                        if (savedFile != null) {
+                            Attachment attachment = new Attachment();
+                            attachment.setFilename(savedFile);
+                            attachment.setOriginalName(file.getOriginalFilename());
+                            attachment.setFilePath(uploadDir + "/" + savedFile);
+                            attachment.setFileSize(file.getSize());
+                            attachment.setContentType(file.getContentType());
+                            attachment.setActivity(activity);
+                            
+                            attachmentRepository.save(attachment);
+                        }
+                    } catch (IOException e) {
+                        System.err.println("Error saving file " + file.getOriginalFilename() + ": " + e.getMessage());
+                    }
+                }
+            }
+        }
+
+        // Handle new links
+        if (request.getNewLinksJson() != null && !request.getNewLinksJson().isEmpty()) {
+            try {
+                ObjectMapper objectMapper = new ObjectMapper();
+                List<String> newLinks = objectMapper.readValue(
+                    request.getNewLinksJson(), 
+                    new TypeReference<List<String>>(){}
+                );
+                
+                for (String linkUrl : newLinks) {
+                    ActivityLink link = new ActivityLink();
+                    link.setUrl(linkUrl);
+                    link.setActivity(activity);
+                    activityLinkRepository.save(link);
+                }
+            } catch (Exception e) {
+                System.err.println("Error adding new links: " + e.getMessage());
+            }
+        }
+
+        Activity savedActivity = activityRepository.save(activity);
+        return convertToDTO(savedActivity);
     }
 
     private boolean isUserAdmin(Long userId) {

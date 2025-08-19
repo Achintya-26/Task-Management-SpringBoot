@@ -251,6 +251,121 @@ public class ActivityController {
         }
     }
 
+//    @PutMapping("/{activityId}")
+//    public ResponseEntity<Map<String, Object>> updateActivity(
+//            @PathVariable Long activityId,
+//            @RequestBody CreateActivityRequest request,
+//            HttpServletRequest httpRequest) {
+//        try {
+//            String authHeader = httpRequest.getHeader("Authorization");
+//            if (authHeader == null || !authHeader.startsWith("Bearer ")) {
+//                Map<String, Object> errorResponse = new HashMap<>();
+//                errorResponse.put("message", "Authentication required");
+//                return ResponseEntity.status(401).body(errorResponse);
+//            }
+//            
+//            String token = authHeader.substring(7);
+//            ActivityDTO activity = activityService.updateActivity(activityId, request, token);
+//            
+//            Map<String, Object> response = new HashMap<>();
+//            response.put("message", "Activity updated successfully");
+//            response.put("activity", activity);
+//            
+//            return ResponseEntity.ok(response);
+//            
+//        } catch (RuntimeException error) {
+//            Map<String, Object> errorResponse = new HashMap<>();
+//            if (error.getMessage().contains("not found")) {
+//                errorResponse.put("message", "Activity not found");
+//                return ResponseEntity.status(404).body(errorResponse);
+//            } else if (error.getMessage().contains("permission") || error.getMessage().contains("not authorized")) {
+//                errorResponse.put("message", error.getMessage());
+//                return ResponseEntity.status(403).body(errorResponse);
+//            } else {
+//                System.err.println("Update activity error: " + error.getMessage());
+//                errorResponse.put("message", "Error updating activity: " + error.getMessage());
+//                return ResponseEntity.status(500).body(errorResponse);
+//            }
+//        } catch (Exception error) {
+//            System.err.println("Update activity error: " + error.getMessage());
+//            Map<String, Object> errorResponse = new HashMap<>();
+//            errorResponse.put("message", "Error updating activity: " + error.getMessage());
+//            return ResponseEntity.status(500).body(errorResponse);
+//        }
+//    }
+
+    @PutMapping(value = "/{activityId}", consumes = "multipart/form-data")
+    public ResponseEntity<Map<String, Object>> updateActivityWithFiles(
+            @PathVariable Long activityId,
+            @RequestParam("name") String name,
+            @RequestParam("description") String description,
+            @RequestParam("priority") String priority,
+            @RequestParam(value = "targetDate", required = false) String targetDate,
+            @RequestParam(value = "assignedUsers", required = false) String assignedUsersJson,
+            @RequestParam(value = "newLinks", required = false) String newLinksJson,
+            @RequestParam(value = "attachments", required = false) MultipartFile[] attachments,
+            @RequestParam(value = "attachmentsToDelete", required = false) String attachmentsToDeleteJson,
+            @RequestParam(value = "linksToDelete", required = false) String linksToDeleteJson,
+            HttpServletRequest httpRequest) {
+        try {
+            String authHeader = httpRequest.getHeader("Authorization");
+            if (authHeader == null || !authHeader.startsWith("Bearer ")) {
+                Map<String, Object> errorResponse = new HashMap<>();
+                errorResponse.put("message", "Authentication required");
+                return ResponseEntity.status(401).body(errorResponse);
+            }
+            
+            String token = authHeader.substring(7);
+            
+            // Debug logging
+            System.out.println("=== UPDATE ACTIVITY WITH FILES DEBUG ===");
+            System.out.println("attachmentsToDeleteJson received: " + attachmentsToDeleteJson);
+            System.out.println("linksToDeleteJson received: " + linksToDeleteJson);
+            System.out.println("========================================");
+            
+            // Create request object
+            UpdateActivityWithFilesRequest request = new UpdateActivityWithFilesRequest();
+            request.setName(name);
+            request.setDescription(description);
+            request.setPriority(priority);
+            request.setTargetDate(targetDate);
+            request.setAssignedUsersJson(assignedUsersJson);
+            request.setNewLinksJson(newLinksJson);
+            request.setAttachments(attachments);
+            request.setAttachmentsToDeleteJson(attachmentsToDeleteJson);
+            request.setLinksToDeleteJson(linksToDeleteJson);
+            
+            ActivityDTO activity = activityService.updateActivityWithFiles(activityId, request, token);
+            
+            Map<String, Object> response = new HashMap<>();
+            response.put("message", "Activity updated successfully");
+            response.put("activity", activity);
+            
+            return ResponseEntity.ok(response);
+            
+        } catch (RuntimeException error) {
+            Map<String, Object> errorResponse = new HashMap<>();
+            if (error.getMessage().contains("not found")) {
+                errorResponse.put("message", "Activity not found");
+                return ResponseEntity.status(404).body(errorResponse);
+            } else if (error.getMessage().contains("permission") || error.getMessage().contains("not authorized")) {
+                errorResponse.put("message", error.getMessage());
+                return ResponseEntity.status(403).body(errorResponse);
+            } else {
+                System.err.println("Update activity with files error: " + error.getMessage());
+                error.printStackTrace();
+                errorResponse.put("message", "Error updating activity: " + error.getMessage());
+                return ResponseEntity.status(500).body(errorResponse);
+            }
+        } catch (Exception error) {
+            System.err.println("Update activity with files error: " + error.getMessage());
+            error.printStackTrace();
+            Map<String, Object> errorResponse = new HashMap<>();
+            errorResponse.put("message", "Error updating activity: " + error.getMessage());
+            return ResponseEntity.status(500).body(errorResponse);
+        }
+    }
+
     @Value("${app.upload.dir:uploads}")
     private String uploadDir;
 
