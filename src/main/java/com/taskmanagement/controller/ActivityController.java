@@ -251,6 +251,90 @@ public class ActivityController {
         }
     }
 
+    // Update remark
+    @PutMapping("/remarks/{remarkId}")
+    public ResponseEntity<Map<String, Object>> updateRemark(
+            @PathVariable Long remarkId,
+            @RequestBody AddRemarkRequest request,
+            HttpServletRequest httpRequest) {
+        try {
+            String authHeader = httpRequest.getHeader("Authorization");
+            if (authHeader == null || !authHeader.startsWith("Bearer ")) {
+                Map<String, Object> errorResponse = new HashMap<>();
+                errorResponse.put("message", "Authentication required");
+                return ResponseEntity.status(401).body(errorResponse);
+            }
+            
+            String token = authHeader.substring(7);
+            RemarkDTO remark = activityService.updateRemark(remarkId, request, token);
+            
+            Map<String, Object> response = new HashMap<>();
+            response.put("message", "Remark updated successfully");
+            response.put("remark", remark);
+            
+            return ResponseEntity.ok(response);
+            
+        } catch (RuntimeException error) {
+            Map<String, Object> errorResponse = new HashMap<>();
+            if (error.getMessage().contains("not found")) {
+                errorResponse.put("message", "Remark not found");
+                return ResponseEntity.status(404).body(errorResponse);
+            } else if (error.getMessage().contains("not authorized")) {
+                errorResponse.put("message", "You are not authorized to edit this remark");
+                return ResponseEntity.status(403).body(errorResponse);
+            } else {
+                errorResponse.put("message", error.getMessage());
+                return ResponseEntity.status(400).body(errorResponse);
+            }
+        } catch (Exception error) {
+            System.err.println("Update remark error: " + error.getMessage());
+            Map<String, Object> errorResponse = new HashMap<>();
+            errorResponse.put("message", "Internal server error");
+            return ResponseEntity.status(500).body(errorResponse);
+        }
+    }
+
+    // Delete remark
+    @DeleteMapping("/remarks/{remarkId}")
+    public ResponseEntity<Map<String, Object>> deleteRemark(
+            @PathVariable Long remarkId,
+            HttpServletRequest httpRequest) {
+        try {
+            String authHeader = httpRequest.getHeader("Authorization");
+            if (authHeader == null || !authHeader.startsWith("Bearer ")) {
+                Map<String, Object> errorResponse = new HashMap<>();
+                errorResponse.put("message", "Authentication required");
+                return ResponseEntity.status(401).body(errorResponse);
+            }
+            
+            String token = authHeader.substring(7);
+            activityService.deleteRemark(remarkId, token);
+            
+            Map<String, Object> response = new HashMap<>();
+            response.put("message", "Remark deleted successfully");
+            
+            return ResponseEntity.ok(response);
+            
+        } catch (RuntimeException error) {
+            Map<String, Object> errorResponse = new HashMap<>();
+            if (error.getMessage().contains("not found")) {
+                errorResponse.put("message", "Remark not found");
+                return ResponseEntity.status(404).body(errorResponse);
+            } else if (error.getMessage().contains("not authorized")) {
+                errorResponse.put("message", "You are not authorized to delete this remark");
+                return ResponseEntity.status(403).body(errorResponse);
+            } else {
+                errorResponse.put("message", error.getMessage());
+                return ResponseEntity.status(400).body(errorResponse);
+            }
+        } catch (Exception error) {
+            System.err.println("Delete remark error: " + error.getMessage());
+            Map<String, Object> errorResponse = new HashMap<>();
+            errorResponse.put("message", "Internal server error");
+            return ResponseEntity.status(500).body(errorResponse);
+        }
+    }
+
 //    @PutMapping("/{activityId}")
 //    public ResponseEntity<Map<String, Object>> updateActivity(
 //            @PathVariable Long activityId,

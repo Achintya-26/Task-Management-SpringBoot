@@ -419,24 +419,46 @@ public class ActivityService {
             throw new RuntimeException("You do not have permission to update this activity");
         }
 
+        // Get the current user for the remark
+        User currentUser = userRepository.findById(currentUserId)
+                .orElseThrow(() -> new RuntimeException("User not found"));
+
+        // Store the old status for the automatic remark
+        String oldStatus = activity.getStatus().getValue();
+        String newStatusValue = request.getStatus();
+
         try {
-            Activity.ActivityStatus newStatus = Activity.ActivityStatus.fromValue(request.getStatus());
+            Activity.ActivityStatus newStatus = Activity.ActivityStatus.fromValue(newStatusValue);
             activity.setStatus(newStatus);
             activity.setUpdatedAt(LocalDateTime.now());
         } catch (IllegalArgumentException e) {
             throw new RuntimeException("Invalid status value: " + request.getStatus());
         }
 
-        // TODO: Add remark to activity history if remarks provided
+        // Create automatic status change remark
+        String statusChangeMessage = String.format("Status changed from '%s' to '%s' by %s (%s)", 
+            getStatusDisplayName(oldStatus), 
+            getStatusDisplayName(newStatusValue), 
+            currentUser.getName(), 
+            currentUser.getEmpId());
+        
+        Remark statusChangeRemark = new Remark(
+            statusChangeMessage, 
+            currentUserId, 
+            activityId, 
+            Remark.RemarkType.STATUS_UPDATE
+        );
+        remarkRepository.save(statusChangeRemark);
+
+        // Add user-provided remark if available (this should be editable, so keep as GENERAL)
         if (request.getRemarks() != null && !request.getRemarks().trim().isEmpty()) {
-            // Save remark to remarks table with status update type
-            Remark statusRemark = new Remark(
+            Remark userRemark = new Remark(
                 request.getRemarks().trim(), 
                 currentUserId, 
                 activityId, 
-                Remark.RemarkType.STATUS_UPDATE
+                Remark.RemarkType.GENERAL
             );
-            remarkRepository.save(statusRemark);
+            remarkRepository.save(userRemark);
         }
 
         Activity savedActivity = activityRepository.save(activity);
@@ -488,6 +510,65 @@ public class ActivityService {
         return remarks.stream()
                 .map(this::convertRemarkToDTO)
                 .collect(Collectors.toList());
+    }
+
+    @Transactional
+    public RemarkDTO updateRemark(Long remarkId, AddRemarkRequest request, String token) {
+        Long currentUserId = jwtUtil.extractUserId(token);
+        if (currentUserId == null) {
+            throw new RuntimeException("Invalid token");
+        }
+
+        // Get the existing remark
+        Remark remark = remarkRepository.findById(remarkId)
+            .orElseThrow(() -> new RuntimeException("Remark not found"));
+
+        // Check if user is the creator or admin
+        User currentUser = userRepository.findById(currentUserId)
+            .orElseThrow(() -> new RuntimeException("User not found"));
+        
+        if (!currentUser.getRole().equals("admin") && !remark.getUserId().equals(currentUserId)) {
+            throw new RuntimeException("You are not authorized to edit this remark");
+        }
+
+        // Prevent editing of status update remarks
+        if (remark.getType() == Remark.RemarkType.STATUS_UPDATE) {
+            throw new RuntimeException("Status update remarks cannot be edited");
+        }
+
+        // Update the remark
+        remark.setText(request.getText());
+        Remark savedRemark = remarkRepository.save(remark);
+        
+        return convertRemarkToDTO(savedRemark);
+    }
+
+    @Transactional
+    public void deleteRemark(Long remarkId, String token) {
+        Long currentUserId = jwtUtil.extractUserId(token);
+        if (currentUserId == null) {
+            throw new RuntimeException("Invalid token");
+        }
+
+        // Get the existing remark
+        Remark remark = remarkRepository.findById(remarkId)
+            .orElseThrow(() -> new RuntimeException("Remark not found"));
+
+        // Check if user is the creator or admin
+        User currentUser = userRepository.findById(currentUserId)
+            .orElseThrow(() -> new RuntimeException("User not found"));
+        
+        if (!currentUser.getRole().equals("admin") && !remark.getUserId().equals(currentUserId)) {
+            throw new RuntimeException("You are not authorized to delete this remark");
+        }
+
+        // Prevent deletion of status update remarks
+        if (remark.getType() == Remark.RemarkType.STATUS_UPDATE) {
+            throw new RuntimeException("Status update remarks cannot be deleted");
+        }
+
+        // Delete the remark
+        remarkRepository.delete(remark);
     }
 
     @Transactional
@@ -545,11 +626,6 @@ public class ActivityService {
                 System.err.println("Error parsing assigned users: " + e.getMessage());
             }
         }
-
-        // Handle attachment deletions
-        System.out.println("=== SERVICE DEBUG ===");
-        System.out.println("attachmentsToDeleteJson: " + request.getAttachmentsToDeleteJson());
-        System.out.println("linksToDeleteJson: " + request.getLinksToDeleteJson());
         
         if (request.getAttachmentsToDeleteJson() != null && !request.getAttachmentsToDeleteJson().isEmpty()) {
             try {
@@ -559,14 +635,14 @@ public class ActivityService {
                     new TypeReference<List<Long>>(){}
                 );
                 
-                System.out.println("Parsed attachment IDs to delete: " + attachmentIds);
+                
                 
                 for (Long attachmentId : attachmentIds) {
-                    System.out.println("Deleting attachment with ID: " + attachmentId);
+                    
                     
                     // First check if the attachment exists
                     boolean exists = attachmentRepository.existsById(attachmentId);
-                    System.out.println("Attachment exists before deletion: " + exists);
+                    
                     
                     if (exists) {
                         // Try to find the attachment first to get more info
@@ -720,6 +796,21 @@ public class ActivityService {
         } catch (Exception e) {
             // Handle lazy loading exception
             return false;
+        }
+    }
+
+    private String getStatusDisplayName(String status) {
+        switch (status.toLowerCase()) {
+            case "pending":
+                return "Pending";
+            case "in-progress":
+                return "In Progress";
+            case "completed":
+                return "Completed";
+            case "on-hold":
+                return "On Hold";
+            default:
+                return status;
         }
     }
 }
