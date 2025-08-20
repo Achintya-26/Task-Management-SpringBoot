@@ -4,11 +4,13 @@ import com.taskmanagement.dto.AddMembersRequest;
 import com.taskmanagement.model.Team;
 import com.taskmanagement.service.NotificationService;
 import com.taskmanagement.service.TeamService;
+import com.taskmanagement.util.JwtUtil;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
+import javax.servlet.http.HttpServletRequest;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -24,6 +26,9 @@ public class TeamController {
     
     @Autowired
     private NotificationService notificationService;
+    
+    @Autowired
+    private JwtUtil jwtUtil;
 
     @GetMapping
     public ResponseEntity<List<Team>> getAllTeams() {
@@ -47,9 +52,18 @@ public class TeamController {
     @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<Map<String, Object>> addMembersToTeam(
             @PathVariable Long teamId, 
-            @RequestBody AddMembersRequest request) {
+            @RequestBody AddMembersRequest request,
+            HttpServletRequest httpRequest) {
         
         try {
+            // Get current user ID from JWT token
+            Long currentUserId = getCurrentUserId(httpRequest);
+            if (currentUserId == null) {
+                Map<String, Object> errorResponse = new HashMap<>();
+                errorResponse.put("message", "Authentication required");
+                return ResponseEntity.status(401).body(errorResponse);
+            }
+            
             Team team = teamService.findById(teamId);
             if (team == null) {
                 Map<String, Object> errorResponse = new HashMap<>();
@@ -60,7 +74,7 @@ public class TeamController {
             // Add users to team
             for (Long userId : request.getUserIds()) {
                 try {
-                    teamService.addMember(teamId, userId);
+                    teamService.addMember(teamId, userId, currentUserId);
                     
                     // Create notification for user
                     notificationService.createNotification(
@@ -104,9 +118,18 @@ public class TeamController {
     @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<Map<String, Object>> removeMemberFromTeam(
             @PathVariable Long teamId, 
-            @PathVariable Long userId) {
+            @PathVariable Long userId,
+            HttpServletRequest httpRequest) {
         
         try {
+            // Get current user ID from JWT token
+            Long currentUserId = getCurrentUserId(httpRequest);
+            if (currentUserId == null) {
+                Map<String, Object> errorResponse = new HashMap<>();
+                errorResponse.put("message", "Authentication required");
+                return ResponseEntity.status(401).body(errorResponse);
+            }
+            
             Team team = teamService.findById(teamId);
             if (team == null) {
                 Map<String, Object> errorResponse = new HashMap<>();
@@ -114,7 +137,7 @@ public class TeamController {
                 return ResponseEntity.status(404).body(errorResponse);
             }
 
-            boolean removed = teamService.removeMember(teamId, userId);
+            boolean removed = teamService.removeMember(teamId, userId, currentUserId);
             if (!removed) {
                 Map<String, Object> errorResponse = new HashMap<>();
                 errorResponse.put("message", "User is not a member of this team");
@@ -161,5 +184,23 @@ public class TeamController {
     public ResponseEntity<Void> deleteTeam(@PathVariable Long id) {
         teamService.deleteTeam(id);
         return ResponseEntity.noContent().build();
+    }
+    
+    /**
+     * Helper method to extract current user ID from JWT token
+     */
+    private Long getCurrentUserId(HttpServletRequest request) {
+        try {
+            String authHeader = request.getHeader("Authorization");
+            if (authHeader != null && authHeader.startsWith("Bearer ")) {
+                String token = authHeader.substring(7);
+                if (jwtUtil.validateToken(token)) {
+                    return jwtUtil.extractUserId(token);
+                }
+            }
+            return null;
+        } catch (Exception e) {
+            return null;
+        }
     }
 }

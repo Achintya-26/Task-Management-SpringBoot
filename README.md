@@ -99,7 +99,7 @@ task-management-backend
    mvn spring-boot:run
    ```
 
-6. Access the API at `http://localhost:8080/api`.
+6. Access the API at `http://localhost:3000/api`.
 
 ## API Documentation
 

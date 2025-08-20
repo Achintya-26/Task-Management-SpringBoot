@@ -66,6 +66,9 @@ public class ActivityService {
     private ActivityLinkRepository activityLinkRepository;
 
     @Autowired
+    private NotificationService notificationService;
+
+    @Autowired
     private JwtUtil jwtUtil;
 
     @PersistenceContext
@@ -276,6 +279,16 @@ public class ActivityService {
         activity.setAssignedMembers(assignedMembers);
 
         Activity savedActivity = activityRepository.save(activity);
+        
+        // Send notifications to assigned members
+        System.out.println("Activity created, calling notifyActivityCreated for: " + savedActivity.getName());
+        try {
+            notificationService.notifyActivityCreated(savedActivity, creator);
+        } catch (Exception e) {
+            System.err.println("Failed to send activity creation notifications: " + e.getMessage());
+            e.printStackTrace();
+        }
+        
         return convertToDTO(savedActivity);
     }
 
@@ -396,6 +409,15 @@ public class ActivityService {
             }
         }
 
+        // Send notifications to assigned members
+        System.out.println("Activity with files created, calling notifyActivityCreated for: " + savedActivity.getName());
+        try {
+            notificationService.notifyActivityCreated(savedActivity, creator);
+        } catch (Exception e) {
+            System.err.println("Failed to send activity creation notifications: " + e.getMessage());
+            e.printStackTrace();
+        }
+
         // Return the activity with all its relationships loaded
         return convertToDTO(activityRepository.findById(savedActivity.getId()).orElse(savedActivity));
     }
@@ -484,6 +506,16 @@ public class ActivityService {
         }
 
         Activity savedActivity = activityRepository.save(activity);
+        
+        // Send notifications to assigned members about status change
+        try {
+            User updater = userRepository.findById(currentUserId)
+                    .orElseThrow(() -> new RuntimeException("Updater user not found"));
+            notificationService.notifyActivityStatusChanged(savedActivity, updater);
+        } catch (Exception e) {
+            System.err.println("Failed to send activity status change notifications: " + e.getMessage());
+        }
+        
         return convertToDTO(savedActivity);
     }
 
@@ -520,6 +552,19 @@ public class ActivityService {
         activity.setUpdatedAt(LocalDateTime.now());
 
         Activity savedActivity = activityRepository.save(activity);
+        
+        // Trigger notifications for remark addition
+        System.out.println("Remark added, calling notifyRemarkAdded");
+        try {
+            User remarkAuthor = userRepository.findById(currentUserId)
+                    .orElseThrow(() -> new RuntimeException("User not found with ID: " + currentUserId));
+            notificationService.notifyRemarkAdded(savedActivity, remarkAuthor, request.getText().trim());
+            System.out.println("Remark notification triggered successfully");
+        } catch (Exception e) {
+            System.err.println("Failed to send remark notification: " + e.getMessage());
+            e.printStackTrace();
+        }
+        
         return convertToDTO(savedActivity);
     }
 
@@ -561,6 +606,18 @@ public class ActivityService {
         // Update the remark
         remark.setText(request.getText());
         Remark savedRemark = remarkRepository.save(remark);
+        
+        // Trigger notifications for remark update
+        System.out.println("Remark updated, calling notifyRemarkUpdated");
+        try {
+            Activity activity = activityRepository.findById(remark.getActivityId())
+                    .orElseThrow(() -> new RuntimeException("Activity not found with ID: " + remark.getActivityId()));
+            notificationService.notifyRemarkUpdated(activity, currentUser, request.getText().trim());
+            System.out.println("Remark update notification triggered successfully");
+        } catch (Exception e) {
+            System.err.println("Failed to send remark update notification: " + e.getMessage());
+            e.printStackTrace();
+        }
         
         return convertRemarkToDTO(savedRemark);
     }

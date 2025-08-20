@@ -328,4 +328,39 @@ public class NotificationController {
             return null;
         }
     }
+
+    /**
+     * Create a test notification (for testing WebSocket real-time notifications)
+     */
+    @PostMapping("/test")
+    public ResponseEntity<Map<String, Object>> createTestNotification(HttpServletRequest request) {
+        try {
+            Long userId = getCurrentUserId(request);
+            if (userId == null) {
+                Map<String, Object> error = new HashMap<>();
+                error.put("error", "Unauthorized");
+                return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(error);
+            }
+
+            Notification notification = notificationService.createNotification(
+                userId,
+                "Test Notification",
+                "This is a test notification to verify the real-time notification system is working correctly.",
+                "TEST",
+                null, // relatedTeamId
+                null  // relatedActivityId
+            );
+
+            Map<String, Object> response = new HashMap<>();
+            response.put("message", "Test notification created and sent via WebSocket");
+            response.put("notification", notification);
+            return ResponseEntity.ok(response);
+
+        } catch (Exception e) {
+            System.err.println("Create test notification error: " + e.getMessage());
+            Map<String, Object> error = new HashMap<>();
+            error.put("error", "Failed to create test notification");
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(error);
+        }
+    }
 }
