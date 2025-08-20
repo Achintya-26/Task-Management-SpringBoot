@@ -264,6 +264,17 @@ public class ActivityService {
             activity.setAssignedMembers(assignedUsers);
         }
 
+        // Always add the creator to the assigned members list
+        User creator = userRepository.findById(currentUserId)
+                .orElseThrow(() -> new RuntimeException("Creator user not found"));
+        
+        Set<User> assignedMembers = activity.getAssignedMembers();
+        if (assignedMembers == null) {
+            assignedMembers = new HashSet<>();
+        }
+        assignedMembers.add(creator);
+        activity.setAssignedMembers(assignedMembers);
+
         Activity savedActivity = activityRepository.save(activity);
         return convertToDTO(savedActivity);
     }
@@ -323,6 +334,17 @@ public class ActivityService {
                 System.err.println("Error parsing assigned users: " + e.getMessage());
             }
         }
+
+        // Always add the creator to the assigned members list
+        User creator = userRepository.findById(currentUserId)
+                .orElseThrow(() -> new RuntimeException("Creator user not found"));
+        
+        Set<User> assignedMembers = activity.getAssignedMembers();
+        if (assignedMembers == null) {
+            assignedMembers = new HashSet<>();
+        }
+        assignedMembers.add(creator);
+        activity.setAssignedMembers(assignedMembers);
 
         // Save the activity first to get its ID
         Activity savedActivity = activityRepository.save(activity);
@@ -626,6 +648,17 @@ public class ActivityService {
                 System.err.println("Error parsing assigned users: " + e.getMessage());
             }
         }
+
+        // Always ensure the creator is in the assigned members list (for both new assignments and updates)
+        User creator = userRepository.findById(currentUserId)
+                .orElseThrow(() -> new RuntimeException("Creator user not found"));
+        
+        Set<User> assignedMembers = activity.getAssignedMembers();
+        if (assignedMembers == null) {
+            assignedMembers = new HashSet<>();
+        }
+        assignedMembers.add(creator);
+        activity.setAssignedMembers(assignedMembers);
         
         if (request.getAttachmentsToDeleteJson() != null && !request.getAttachmentsToDeleteJson().isEmpty()) {
             try {
@@ -780,6 +813,38 @@ public class ActivityService {
 
         Activity savedActivity = activityRepository.save(activity);
         return convertToDTO(savedActivity);
+    }
+
+    @Transactional
+    public void deleteActivity(Long activityId, String token) {
+        Long currentUserId = jwtUtil.extractUserId(token);
+        if (currentUserId == null) {
+            throw new RuntimeException("Invalid token");
+        }
+
+        // Get the existing activity
+        Activity activity = activityRepository.findById(activityId)
+            .orElseThrow(() -> new RuntimeException("Activity not found"));
+
+        // Check if user is the creator or admin
+        User currentUser = userRepository.findById(currentUserId)
+            .orElseThrow(() -> new RuntimeException("User not found"));
+        
+        if (!currentUser.getRole().equals("admin") && !activity.getCreatedBy().equals(currentUserId)) {
+            throw new RuntimeException("You are not authorized to delete this activity");
+        }
+
+        // Delete all related remarks first
+        remarkRepository.deleteByActivityId(activityId);
+        
+        // Delete all attachments (cascade should handle this, but to be safe)
+        attachmentRepository.deleteByActivityId(activityId);
+        
+        // Delete all activity links (cascade should handle this, but to be safe)
+        activityLinkRepository.deleteByActivityId(activityId);
+
+        // Delete the activity
+        activityRepository.delete(activity);
     }
 
     private boolean isUserAdmin(Long userId) {

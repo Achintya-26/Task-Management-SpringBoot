@@ -450,6 +450,47 @@ public class ActivityController {
         }
     }
 
+    // Delete activity
+    @DeleteMapping("/{activityId}")
+    public ResponseEntity<Map<String, Object>> deleteActivity(
+            @PathVariable Long activityId,
+            HttpServletRequest httpRequest) {
+        try {
+            String authHeader = httpRequest.getHeader("Authorization");
+            if (authHeader == null || !authHeader.startsWith("Bearer ")) {
+                Map<String, Object> errorResponse = new HashMap<>();
+                errorResponse.put("message", "Authentication required");
+                return ResponseEntity.status(401).body(errorResponse);
+            }
+            
+            String token = authHeader.substring(7);
+            activityService.deleteActivity(activityId, token);
+            
+            Map<String, Object> response = new HashMap<>();
+            response.put("message", "Activity deleted successfully");
+            
+            return ResponseEntity.ok(response);
+            
+        } catch (RuntimeException error) {
+            Map<String, Object> errorResponse = new HashMap<>();
+            if (error.getMessage().contains("not found")) {
+                errorResponse.put("message", "Activity not found");
+                return ResponseEntity.status(404).body(errorResponse);
+            } else if (error.getMessage().contains("not authorized")) {
+                errorResponse.put("message", "You are not authorized to delete this activity");
+                return ResponseEntity.status(403).body(errorResponse);
+            } else {
+                errorResponse.put("message", error.getMessage());
+                return ResponseEntity.status(400).body(errorResponse);
+            }
+        } catch (Exception error) {
+            System.err.println("Delete activity error: " + error.getMessage());
+            Map<String, Object> errorResponse = new HashMap<>();
+            errorResponse.put("message", "Internal server error");
+            return ResponseEntity.status(500).body(errorResponse);
+        }
+    }
+
     @Value("${app.upload.dir:uploads}")
     private String uploadDir;
 

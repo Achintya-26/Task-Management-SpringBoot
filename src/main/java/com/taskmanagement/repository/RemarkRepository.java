@@ -2,10 +2,12 @@ package com.taskmanagement.repository;
 
 import com.taskmanagement.model.Remark;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
+import javax.transaction.Transactional;
 import java.util.List;
 
 @Repository
@@ -31,4 +33,11 @@ public interface RemarkRepository extends JpaRepository<Remark, Long> {
      */
     @Query("SELECT COUNT(r) FROM Remark r WHERE r.activityId = :activityId")
     long countByActivityId(@Param("activityId") Long activityId);
+    
+    /**
+     * Delete all remarks for a specific activity
+     */
+    @Modifying
+    @Transactional
+    void deleteByActivityId(Long activityId);
 }
