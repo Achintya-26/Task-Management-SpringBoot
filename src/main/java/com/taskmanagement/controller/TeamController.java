@@ -1,6 +1,7 @@
 package com.taskmanagement.controller;
 
 import com.taskmanagement.dto.AddMembersRequest;
+import com.taskmanagement.dto.CreateTeamRequest;
 import com.taskmanagement.model.Team;
 import com.taskmanagement.service.NotificationService;
 import com.taskmanagement.service.TeamService;
@@ -37,14 +38,24 @@ public class TeamController {
     }
 
     @GetMapping("/{id}")
-    public ResponseEntity<Optional<Team>> getTeamById(@PathVariable Long id) {
+    public ResponseEntity<Team> getTeamById(@PathVariable Long id) {
         Optional<Team> team = teamService.getTeamById(id);
-        return ResponseEntity.ok(team);
+        if (team.isPresent()) {
+            return ResponseEntity.ok(team.get());
+        } else {
+            return ResponseEntity.notFound().build();
+        }
     }
 
     @PostMapping
-    public ResponseEntity<Team> createTeam(@RequestBody Team team) {
-        Team createdTeam = teamService.createTeam(team);
+    public ResponseEntity<Team> createTeam(@RequestBody CreateTeamRequest request, HttpServletRequest httpRequest) {
+        // Get current user ID from JWT token
+        Long currentUserId = getCurrentUserId(httpRequest);
+        if (currentUserId == null) {
+            return ResponseEntity.status(401).build();
+        }
+        
+        Team createdTeam = teamService.createTeamWithMembers(request, currentUserId);
         return ResponseEntity.status(201).body(createdTeam);
     }
     
@@ -181,9 +192,32 @@ public class TeamController {
     }
 
     @DeleteMapping("/{id}")
-    public ResponseEntity<Void> deleteTeam(@PathVariable Long id) {
-        teamService.deleteTeam(id);
-        return ResponseEntity.noContent().build();
+    public ResponseEntity<Map<String, Object>> deleteTeam(@PathVariable Long id) {
+        try {
+            teamService.deleteTeam(id);
+            
+            Map<String, Object> response = new HashMap<>();
+            response.put("message", "Team deleted successfully");
+            return ResponseEntity.ok(response);
+            
+        } catch (RuntimeException error) {
+            Map<String, Object> errorResponse = new HashMap<>();
+            if (error.getMessage().contains("not found")) {
+                errorResponse.put("message", "Team not found");
+                return ResponseEntity.status(404).body(errorResponse);
+            } else if (error.getMessage().contains("dependencies")) {
+                errorResponse.put("message", "Cannot delete team due to existing dependencies. Please remove all related data first.");
+                return ResponseEntity.status(409).body(errorResponse);
+            } else {
+                errorResponse.put("message", error.getMessage());
+                return ResponseEntity.status(400).body(errorResponse);
+            }
+        } catch (Exception error) {
+            System.err.println("Delete team error: " + error.getMessage());
+            Map<String, Object> errorResponse = new HashMap<>();
+            errorResponse.put("message", "Internal server error");
+            return ResponseEntity.status(500).body(errorResponse);
+        }
     }
     
     /**

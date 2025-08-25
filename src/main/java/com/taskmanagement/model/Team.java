@@ -2,15 +2,19 @@ package com.taskmanagement.model;
 
 import javax.persistence.*;
 
+import org.springframework.data.annotation.CreatedDate;
+import org.springframework.data.annotation.LastModifiedDate;
+import org.springframework.data.jpa.domain.support.AuditingEntityListener;
+
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 
 import java.time.LocalDateTime;
-import java.util.List;
 import java.util.Set;
 import java.util.HashSet;
 
 @Entity
 @Table(name = "teams")
+@EntityListeners(AuditingEntityListener.class)
 @JsonIgnoreProperties({"hibernateLazyInitializer", "handler"})
 public class Team {
     @Id
@@ -21,7 +25,13 @@ public class Team {
     private String description;
     private Long domainId;
     private Long createdBy;
+    
+    @CreatedDate
+    @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
+    
+    @LastModifiedDate
+    @Column(name = "updated_at")
     private LocalDateTime updatedAt;
 
     @ManyToMany(fetch = FetchType.LAZY, cascade = CascadeType.MERGE)

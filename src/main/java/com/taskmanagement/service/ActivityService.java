@@ -19,6 +19,7 @@ import com.taskmanagement.repository.UserRepository;
 import com.taskmanagement.repository.RemarkRepository;
 import com.taskmanagement.repository.AttachmentRepository;
 import com.taskmanagement.repository.ActivityLinkRepository;
+import com.taskmanagement.repository.NotificationRepository;
 import com.taskmanagement.util.JwtUtil;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
@@ -64,6 +65,9 @@ public class ActivityService {
 
     @Autowired
     private ActivityLinkRepository activityLinkRepository;
+
+    @Autowired
+    private NotificationRepository notificationRepository;
 
     @Autowired
     private NotificationService notificationService;
@@ -218,7 +222,10 @@ public class ActivityService {
         teamRepository.findById(teamId)
                 .orElseThrow(() -> new RuntimeException("Team not found with ID: " + teamId));
         
+        // Use the simpler query to avoid duplicates from collection joins
         List<Activity> activities = activityRepository.findByTeamIdWithCreator(teamId);
+        
+        // Convert to DTO - assignedMembers will be loaded lazily during conversion
         return activities.stream()
                 .map(this::convertToDTO)
                 .collect(Collectors.toList());
@@ -891,17 +898,30 @@ public class ActivityService {
             throw new RuntimeException("You are not authorized to delete this activity");
         }
 
-        // Delete all related remarks first
-        remarkRepository.deleteByActivityId(activityId);
-        
-        // Delete all attachments (cascade should handle this, but to be safe)
-        attachmentRepository.deleteByActivityId(activityId);
-        
-        // Delete all activity links (cascade should handle this, but to be safe)
-        activityLinkRepository.deleteByActivityId(activityId);
-
-        // Delete the activity
-        activityRepository.delete(activity);
+        try {
+            // Delete all notifications related to this activity first
+            notificationRepository.deleteByRelatedActivityId(activityId);
+            
+            // Delete all related remarks
+            remarkRepository.deleteByActivityId(activityId);
+            
+            // Delete all attachments
+            attachmentRepository.deleteByActivityId(activityId);
+            
+            // Delete all activity links
+            activityLinkRepository.deleteByActivityId(activityId);
+            
+            // Clear assigned members relationship (many-to-many)
+            activity.getAssignedMembers().clear();
+            activityRepository.save(activity);
+            
+            // Finally delete the activity
+            activityRepository.delete(activity);
+            
+        } catch (Exception e) {
+            System.err.println("Error deleting activity: " + e.getMessage());
+            throw new RuntimeException("Failed to delete activity due to constraint violations. Please ensure all related data is properly handled.");
+        }
     }
 
     private boolean isUserAdmin(Long userId) {

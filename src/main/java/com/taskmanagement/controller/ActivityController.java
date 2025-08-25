@@ -482,15 +482,28 @@ public class ActivityController {
             } else if (error.getMessage().contains("not authorized")) {
                 errorResponse.put("message", "You are not authorized to delete this activity");
                 return ResponseEntity.status(403).body(errorResponse);
+            } else if (error.getMessage().contains("constraint violations")) {
+                errorResponse.put("message", "Cannot delete activity due to existing dependencies. Please remove all related items first.");
+                return ResponseEntity.status(409).body(errorResponse);
             } else {
                 errorResponse.put("message", error.getMessage());
                 return ResponseEntity.status(400).body(errorResponse);
             }
         } catch (Exception error) {
             System.err.println("Delete activity error: " + error.getMessage());
+            error.printStackTrace();
             Map<String, Object> errorResponse = new HashMap<>();
-            errorResponse.put("message", "Internal server error");
-            return ResponseEntity.status(500).body(errorResponse);
+            
+            // Check if it's a constraint violation exception
+            if (error.getMessage().contains("constraint") || 
+                error.getMessage().contains("ConstraintViolationException") ||
+                error.getCause() != null && error.getCause().getMessage().contains("constraint")) {
+                errorResponse.put("message", "Cannot delete activity due to existing dependencies. All related items have been cleaned up, please try again.");
+                return ResponseEntity.status(409).body(errorResponse);
+            } else {
+                errorResponse.put("message", "Internal server error");
+                return ResponseEntity.status(500).body(errorResponse);
+            }
         }
     }
 
