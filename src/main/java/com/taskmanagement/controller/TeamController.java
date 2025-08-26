@@ -32,9 +32,33 @@ public class TeamController {
     private JwtUtil jwtUtil;
 
     @GetMapping
-    public ResponseEntity<List<Team>> getAllTeams() {
-        List<Team> teams = teamService.getAllTeams();
-        return ResponseEntity.ok(teams);
+    public ResponseEntity<List<Team>> getAllTeams(HttpServletRequest request) {
+        Long currentUserId = getCurrentUserId(request);
+        if (currentUserId == null) {
+            return ResponseEntity.status(401).build();
+        }
+        
+        // Check if user is admin
+        if (isUserAdmin(request)) {
+            // Admin can see all teams
+            List<Team> teams = teamService.getAllTeams();
+            return ResponseEntity.ok(teams);
+        } else {
+            // Regular user can only see their teams
+            List<Team> userTeams = teamService.getUserTeams(currentUserId);
+            return ResponseEntity.ok(userTeams);
+        }
+    }
+    
+    @GetMapping("/my-teams")
+    public ResponseEntity<List<Team>> getMyTeams(HttpServletRequest request) {
+        Long currentUserId = getCurrentUserId(request);
+        if (currentUserId == null) {
+            return ResponseEntity.status(401).build();
+        }
+        
+        List<Team> userTeams = teamService.getUserTeams(currentUserId);
+        return ResponseEntity.ok(userTeams);
     }
 
     @GetMapping("/{id}")
@@ -235,6 +259,25 @@ public class TeamController {
             return null;
         } catch (Exception e) {
             return null;
+        }
+    }
+    
+    /**
+     * Helper method to check if current user is admin
+     */
+    private boolean isUserAdmin(HttpServletRequest request) {
+        try {
+            String authHeader = request.getHeader("Authorization");
+            if (authHeader != null && authHeader.startsWith("Bearer ")) {
+                String token = authHeader.substring(7);
+                if (jwtUtil.validateToken(token)) {
+                    String role = jwtUtil.extractRole(token);
+                    return "ADMIN".equalsIgnoreCase(role) || "admin".equalsIgnoreCase(role);
+                }
+            }
+            return false;
+        } catch (Exception e) {
+            return false;
         }
     }
 }

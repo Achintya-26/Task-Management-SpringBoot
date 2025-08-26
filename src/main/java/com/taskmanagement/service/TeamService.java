@@ -41,6 +41,10 @@ public class TeamService {
     public List<Team> getAllTeams() {
         return teamRepository.findAll();
     }
+    
+    public List<Team> getUserTeams(Long userId) {
+        return teamRepository.findTeamsByUserId(userId);
+    }
 
     public Optional<Team> getTeamById(Long id) {
         return teamRepository.findById(id);
