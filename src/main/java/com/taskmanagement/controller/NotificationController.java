@@ -2,7 +2,6 @@ package com.taskmanagement.controller;
 
 import com.taskmanagement.dto.CreateNotificationRequest;
 import com.taskmanagement.model.Notification;
-import com.taskmanagement.model.User;
 import com.taskmanagement.service.NotificationService;
 import com.taskmanagement.service.AuthService;
 import com.taskmanagement.util.JwtUtil;
@@ -282,6 +281,53 @@ public class NotificationController {
             
         } catch (Exception error) {
             System.err.println("Create notification error: " + error.getMessage());
+            Map<String, Object> errorResponse = new HashMap<>();
+            errorResponse.put("message", "Internal server error");
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(errorResponse);
+        }
+    }
+
+    /**
+     * Admin endpoint: Clean up notifications for specific user
+     */
+    @DeleteMapping("/admin/cleanup/user/{userId}")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<Map<String, Object>> cleanupUserNotifications(@PathVariable Long userId) {
+        try {
+            int deletedCount = notificationService.cleanupNotificationsForUser(userId);
+            
+            Map<String, Object> response = new HashMap<>();
+            response.put("message", "User notification cleanup completed");
+            response.put("userId", userId);
+            response.put("deletedCount", deletedCount);
+            
+            return ResponseEntity.ok(response);
+            
+        } catch (Exception error) {
+            System.err.println("User notification cleanup error: " + error.getMessage());
+            Map<String, Object> errorResponse = new HashMap<>();
+            errorResponse.put("message", "Internal server error");
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(errorResponse);
+        }
+    }
+
+    /**
+     * Admin endpoint: Clean up notifications for all users (enforce 50-notification limit)
+     */
+    @DeleteMapping("/admin/cleanup/all-users")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<Map<String, Object>> cleanupAllUsersNotifications() {
+        try {
+            notificationService.cleanupNotificationsForAllUsers();
+            
+            Map<String, Object> response = new HashMap<>();
+            response.put("message", "Notification cleanup completed for all users. Each user now has maximum " + 
+                        notificationService.getMaxNotificationsPerUser() + " notifications.");
+            
+            return ResponseEntity.ok(response);
+            
+        } catch (Exception error) {
+            System.err.println("All users notification cleanup error: " + error.getMessage());
             Map<String, Object> errorResponse = new HashMap<>();
             errorResponse.put("message", "Internal server error");
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(errorResponse);

@@ -8,15 +8,21 @@ import com.taskmanagement.repository.NotificationRepository;
 import com.taskmanagement.repository.UserRepository;
 import com.taskmanagement.websocket.NotificationWebSocketHandler;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import javax.transaction.Transactional;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 @Service
 public class NotificationService {
+
+    @Value("${notification.max.per.user:50}")
+    private int maxNotificationsPerUser;
 
     @Autowired
     private NotificationRepository notificationRepository;
@@ -38,6 +44,9 @@ public class NotificationService {
         if (!userOpt.isPresent()) {
             throw new RuntimeException("User not found with ID: " + userId);
         }
+
+        // Enforce notification limit before creating new notification
+        enforceNotificationLimit(userId);
 
         Notification notification = new Notification();
         notification.setUserId(userId);
@@ -165,12 +174,114 @@ public class NotificationService {
     }
 
     /**
+     * Get the maximum allowed notifications per user
+     */
+    public int getMaxNotificationsPerUser() {
+        return maxNotificationsPerUser;
+    }
+
+    /**
      * Delete old notifications (older than specified days)
      */
     @Transactional
     public int deleteOldNotifications(int daysOld) {
         LocalDateTime cutoffDate = LocalDateTime.now().minusDays(daysOld);
         return notificationRepository.deleteByCreatedAtBefore(cutoffDate);
+    }
+
+    /**
+     * Enforce notification limit for a user
+     * Ensures no user has more than maxNotificationsPerUser notifications
+     */
+    @Transactional
+    private void enforceNotificationLimit(Long userId) {
+        try {
+            long currentCount = notificationRepository.countByUserId(userId);
+            System.out.println("Current notification count for user " + userId + ": " + currentCount);
+            
+            if (currentCount >= maxNotificationsPerUser) {
+                // Calculate how many notifications need to be deleted
+                // We delete enough to make room for the new notification while staying under the limit
+                long notificationsToDelete = currentCount - maxNotificationsPerUser + 1;
+                
+                System.out.println("User " + userId + " has " + currentCount + " notifications. Deleting " + notificationsToDelete + " oldest notifications.");
+                
+                // Get the IDs of the oldest notifications
+                List<Long> oldestNotificationIds = notificationRepository.findOldestNotificationIdsByUserId(userId);
+                
+                if (!oldestNotificationIds.isEmpty()) {
+                    // Take only the number we need to delete
+                    List<Long> idsToDelete = oldestNotificationIds.subList(0, Math.min((int)notificationsToDelete, oldestNotificationIds.size()));
+                    
+                    // Delete the oldest notifications using batch delete
+                    if (!idsToDelete.isEmpty()) {
+                        notificationRepository.deleteByIdIn(idsToDelete);
+                        System.out.println("Successfully deleted " + idsToDelete.size() + " oldest notifications for user " + userId);
+                    }
+                }
+            }
+        } catch (Exception e) {
+            System.err.println("Error enforcing notification limit for user " + userId + ": " + e.getMessage());
+            e.printStackTrace();
+            // Don't throw exception here to avoid preventing notification creation
+        }
+    }
+
+    /**
+     * Manually clean up notifications for a specific user
+     * This can be called by admin operations
+     */
+    @Transactional
+    public int cleanupNotificationsForUser(Long userId) {
+        try {
+            long currentCount = notificationRepository.countByUserId(userId);
+            
+            if (currentCount > maxNotificationsPerUser) {
+                long notificationsToDelete = currentCount - maxNotificationsPerUser;
+                
+                List<Long> oldestNotificationIds = notificationRepository.findOldestNotificationIdsByUserId(userId);
+                List<Long> idsToDelete = oldestNotificationIds.subList(0, Math.min((int)notificationsToDelete, oldestNotificationIds.size()));
+                
+                if (!idsToDelete.isEmpty()) {
+                    notificationRepository.deleteByIdIn(idsToDelete);
+                    return idsToDelete.size();
+                }
+            }
+            
+            return 0;
+        } catch (Exception e) {
+            System.err.println("Error cleaning up notifications for user " + userId + ": " + e.getMessage());
+            e.printStackTrace();
+            return 0;
+        }
+    }
+
+    /**
+     * Clean up notifications for all users
+     * This can be run as a scheduled job or admin operation
+     */
+    @Transactional
+    public void cleanupNotificationsForAllUsers() {
+        try {
+            // Get all unique user IDs that have notifications
+            List<Notification> allNotifications = notificationRepository.findAll();
+            Set<Long> userIds = allNotifications.stream()
+                    .map(Notification::getUserId)
+                    .collect(Collectors.toSet());
+            
+            System.out.println("Cleaning up notifications for " + userIds.size() + " users");
+            
+            int totalDeleted = 0;
+            for (Long userId : userIds) {
+                int deletedForUser = cleanupNotificationsForUser(userId);
+                totalDeleted += deletedForUser;
+            }
+            
+            System.out.println("Total notifications deleted during cleanup: " + totalDeleted);
+        } catch (Exception e) {
+            System.err.println("Error during notification cleanup for all users: " + e.getMessage());
+            e.printStackTrace();
+        }
     }
 
     /**
