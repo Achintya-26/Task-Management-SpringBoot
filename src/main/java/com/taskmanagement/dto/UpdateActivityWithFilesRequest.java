@@ -8,6 +8,7 @@ public class UpdateActivityWithFilesRequest {
     private String priority;
     private String targetDate;
     private String assignedUsersJson;
+    private String creatorSubscribed;
     private String newLinksJson;
     private String attachmentsToDeleteJson;
     private String linksToDeleteJson;
@@ -55,6 +56,14 @@ public class UpdateActivityWithFilesRequest {
 
     public void setAssignedUsersJson(String assignedUsersJson) {
         this.assignedUsersJson = assignedUsersJson;
+    }
+
+    public String getCreatorSubscribed() {
+        return creatorSubscribed;
+    }
+
+    public void setCreatorSubscribed(String creatorSubscribed) {
+        this.creatorSubscribed = creatorSubscribed;
     }
 
     public String getNewLinksJson() {

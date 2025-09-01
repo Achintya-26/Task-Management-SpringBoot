@@ -245,11 +245,12 @@ public class NotificationService {
     public void notifyActivityCreated(Activity activity, User creator) {
         System.out.println("notifyActivityCreated called for activity: " + activity.getName() + " by creator: " + creator.getName());
         
+        // Notify all assigned members (except creator)
         if (activity.getAssignedMembers() != null) {
             System.out.println("Activity has " + activity.getAssignedMembers().size() + " assigned members");
             for (User member : activity.getAssignedMembers()) {
-                if (!member.getId().equals(creator.getId())) { // Don't notify creator
-                    System.out.println("Creating notification for member: " + member.getName() + " (ID: " + member.getId() + ")");
+                if (!member.getId().equals(creator.getId())) { // Don't notify creator here
+                    System.out.println("Creating notification for assigned member: " + member.getName() + " (ID: " + member.getId() + ")");
                     createNotification(
                         member.getId(),
                         "New Activity Assigned",
@@ -259,11 +260,27 @@ public class NotificationService {
                         activity.getId()
                     );
                 } else {
-                    System.out.println("Skipping notification for creator: " + member.getName());
+                    System.out.println("Skipping assigned member notification for creator: " + member.getName());
                 }
             }
         } else {
             System.out.println("Activity has no assigned members");
+        }
+        
+        // Separately handle creator notifications based on creatorSubscribed flag
+        Boolean creatorSubscribed = activity.getCreatorSubscribed();
+        if (creatorSubscribed != null && creatorSubscribed) {
+            System.out.println("Creating notification for creator (subscribed): " + creator.getName() + " (ID: " + creator.getId() + ")");
+            createNotification(
+                creator.getId(),
+                "Activity Created",
+                "Your activity '" + activity.getName() + "' has been created successfully",
+                "ACTIVITY_CREATED",
+                null,
+                activity.getId()
+            );
+        } else {
+            System.out.println("Skipping notification for creator (not subscribed): " + creator.getName());
         }
     }
 
@@ -293,6 +310,7 @@ public class NotificationService {
      */
     @Transactional
     public void notifyActivityStatusChanged(Activity activity, User updater) {
+        // Notify assigned members (except updater)
         if (activity.getAssignedMembers() != null) {
             for (User member : activity.getAssignedMembers()) {
                 if (!member.getId().equals(updater.getId())) { // Don't notify updater
@@ -305,6 +323,28 @@ public class NotificationService {
                         activity.getId()
                     );
                 }
+            }
+        }
+
+        // Notify creator if they subscribed to notifications and are not the updater and not already assigned
+        if (activity.getCreatorSubscribed() != null && activity.getCreatorSubscribed() 
+            && !activity.getCreatedBy().equals(updater.getId())) {
+            
+            boolean creatorAlreadyNotified = false;
+            if (activity.getAssignedMembers() != null) {
+                creatorAlreadyNotified = activity.getAssignedMembers().stream()
+                    .anyMatch(member -> member.getId().equals(activity.getCreatedBy()));
+            }
+            
+            if (!creatorAlreadyNotified) {
+                createNotification(
+                    activity.getCreatedBy(),
+                    "Activity Status Changed",
+                    "Your activity '" + activity.getName() + "' status changed to: " + activity.getStatus(),
+                    "ACTIVITY_STATUS_CHANGED",
+                    null,
+                    activity.getId()
+                );
             }
         }
     }
@@ -368,8 +408,10 @@ public class NotificationService {
             System.out.println("Activity has no assigned members for remark notification");
         }
 
-        // Also notify the activity creator if they're not the remark author and not already in assigned members
-        if (!activity.getCreatedBy().equals(remarkAuthor.getId())) {
+        // Notify creator if they subscribed to notifications and are not the remark author and not already assigned
+        if (activity.getCreatorSubscribed() != null && activity.getCreatorSubscribed() 
+            && !activity.getCreatedBy().equals(remarkAuthor.getId())) {
+            
             boolean creatorAlreadyNotified = false;
             if (activity.getAssignedMembers() != null) {
                 creatorAlreadyNotified = activity.getAssignedMembers().stream()
@@ -377,7 +419,7 @@ public class NotificationService {
             }
             
             if (!creatorAlreadyNotified) {
-                System.out.println("Creating remark notification for activity creator (ID: " + activity.getCreatedBy() + ")");
+                System.out.println("Creating remark notification for activity creator (ID: " + activity.getCreatedBy() + ") - creator subscribed");
                 createNotification(
                     activity.getCreatedBy(),
                     "New Remark Added",
@@ -420,8 +462,10 @@ public class NotificationService {
             System.out.println("Activity has no assigned members for remark update notification");
         }
 
-        // Also notify the activity creator if they're not the remark author and not already in assigned members
-        if (!activity.getCreatedBy().equals(remarkAuthor.getId())) {
+        // Notify creator if they subscribed to notifications and are not the remark author and not already assigned
+        if (activity.getCreatorSubscribed() != null && activity.getCreatorSubscribed() 
+            && !activity.getCreatedBy().equals(remarkAuthor.getId())) {
+            
             boolean creatorAlreadyNotified = false;
             if (activity.getAssignedMembers() != null) {
                 creatorAlreadyNotified = activity.getAssignedMembers().stream()
@@ -429,7 +473,7 @@ public class NotificationService {
             }
             
             if (!creatorAlreadyNotified) {
-                System.out.println("Creating remark update notification for activity creator (ID: " + activity.getCreatedBy() + ")");
+                System.out.println("Creating remark update notification for activity creator (ID: " + activity.getCreatedBy() + ") - creator subscribed");
                 createNotification(
                     activity.getCreatedBy(),
                     "Remark Updated",

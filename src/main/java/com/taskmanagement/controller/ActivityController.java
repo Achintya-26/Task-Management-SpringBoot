@@ -108,6 +108,7 @@ public class ActivityController {
             @RequestParam(value = "assignedUsers", required = false) String assignedUsersJson,
             @RequestParam(value = "links", required = false) String linksJson,
             @RequestParam(value = "attachments", required = false) MultipartFile[] attachments,
+            @RequestParam(value = "creatorSubscribed", required = false) Boolean creatorSubscribed,
             HttpServletRequest httpRequest) {
         try {
             String authHeader = httpRequest.getHeader("Authorization");
@@ -129,6 +130,7 @@ public class ActivityController {
             request.setAssignedUsersJson(assignedUsersJson);
             request.setLinksJson(linksJson);
             request.setAttachments(attachments);
+            request.setCreatorSubscribed(creatorSubscribed != null ? creatorSubscribed : false);
             
             ActivityDTO activity = activityService.createActivityWithFiles(request, token);
             
@@ -389,11 +391,13 @@ public class ActivityController {
             @RequestParam("priority") String priority,
             @RequestParam(value = "targetDate", required = false) String targetDate,
             @RequestParam(value = "assignedUsers", required = false) String assignedUsersJson,
+            @RequestParam(value = "creatorSubscribed", required = false) String creatorSubscribed,
             @RequestParam(value = "newLinks", required = false) String newLinksJson,
             @RequestParam(value = "attachments", required = false) MultipartFile[] attachments,
             @RequestParam(value = "attachmentsToDelete", required = false) String attachmentsToDeleteJson,
             @RequestParam(value = "linksToDelete", required = false) String linksToDeleteJson,
             HttpServletRequest httpRequest) {
+        
         try {
             String authHeader = httpRequest.getHeader("Authorization");
             if (authHeader == null || !authHeader.startsWith("Bearer ")) {
@@ -408,6 +412,7 @@ public class ActivityController {
             System.out.println("=== UPDATE ACTIVITY WITH FILES DEBUG ===");
             System.out.println("attachmentsToDeleteJson received: " + attachmentsToDeleteJson);
             System.out.println("linksToDeleteJson received: " + linksToDeleteJson);
+            System.out.println("creatorSubscribed received: " + creatorSubscribed);
             System.out.println("========================================");
             
             // Create request object
@@ -417,6 +422,7 @@ public class ActivityController {
             request.setPriority(priority);
             request.setTargetDate(targetDate);
             request.setAssignedUsersJson(assignedUsersJson);
+            request.setCreatorSubscribed(creatorSubscribed);
             request.setNewLinksJson(newLinksJson);
             request.setAttachments(attachments);
             request.setAttachmentsToDeleteJson(attachmentsToDeleteJson);
@@ -450,6 +456,21 @@ public class ActivityController {
             Map<String, Object> errorResponse = new HashMap<>();
             errorResponse.put("message", "Error updating activity: " + error.getMessage());
             return ResponseEntity.status(500).body(errorResponse);
+        } finally {
+            // Force cleanup of any remaining multipart file references
+            if (attachments != null) {
+                for (MultipartFile file : attachments) {
+                    if (file != null && !file.isEmpty()) {
+                        try {
+                            // This helps with cleanup on Windows
+                            file.getInputStream().close();
+                        } catch (Exception e) {
+                            // Ignore cleanup errors
+                        }
+                    }
+                }
+            }
+            System.gc(); // Suggest garbage collection to help with cleanup
         }
     }
 

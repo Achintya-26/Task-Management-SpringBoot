@@ -112,6 +112,7 @@ public class ActivityService {
         dto.setDescription(activity.getDescription());
         dto.setPriority(activity.getPriority());
         dto.setStatus(activity.getStatus() != null ? activity.getStatus().getValue() : "pending"); // Added status
+        dto.setCreatorSubscribed(activity.getCreatorSubscribed()); // Added creator subscription
         dto.setTargetDate(activity.getTargetDate());
         dto.setCreatedBy(activity.getCreatedBy());
         dto.setCreatedAt(activity.getCreatedAt());
@@ -317,6 +318,7 @@ public class ActivityService {
         activity.setTeam(team);
         activity.setCreatedBy(currentUserId);
         activity.setStatus(Activity.ActivityStatus.PENDING);
+        activity.setCreatorSubscribed(request.getCreatorSubscribed() != null ? request.getCreatorSubscribed() : true);
         
         LocalDateTime now = LocalDateTime.now();
         activity.setCreatedAt(now);
@@ -354,17 +356,6 @@ public class ActivityService {
                 System.err.println("Error parsing assigned users: " + e.getMessage());
             }
         }
-
-        // Always add the creator to the assigned members list
-        User creator = userRepository.findById(currentUserId)
-                .orElseThrow(() -> new RuntimeException("Creator user not found"));
-        
-        Set<User> assignedMembers = activity.getAssignedMembers();
-        if (assignedMembers == null) {
-            assignedMembers = new HashSet<>();
-        }
-        assignedMembers.add(creator);
-        activity.setAssignedMembers(assignedMembers);
 
         // Save the activity first to get its ID
         Activity savedActivity = activityRepository.save(activity);
@@ -419,6 +410,8 @@ public class ActivityService {
         // Send notifications to assigned members
         System.out.println("Activity with files created, calling notifyActivityCreated for: " + savedActivity.getName());
         try {
+            User creator = userRepository.findById(currentUserId)
+                    .orElseThrow(() -> new RuntimeException("Creator user not found"));
             notificationService.notifyActivityCreated(savedActivity, creator);
         } catch (Exception e) {
             System.err.println("Failed to send activity creation notifications: " + e.getMessage());
@@ -444,9 +437,17 @@ public class ActivityService {
         }
         String uniqueFilename = UUID.randomUUID().toString() + fileExtension;
 
-        // Save file
+        // Save file with proper resource management
         Path filePath = uploadPath.resolve(uniqueFilename);
-        Files.copy(file.getInputStream(), filePath, StandardCopyOption.REPLACE_EXISTING);
+        
+        // Use try-with-resources to ensure the input stream is properly closed
+        try (java.io.InputStream inputStream = file.getInputStream()) {
+            Files.copy(inputStream, filePath, StandardCopyOption.REPLACE_EXISTING);
+        }
+        
+        // Force file system sync
+        filePath.toFile().setReadable(true);
+        filePath.toFile().setWritable(true);
 
         return uniqueFilename;
     }
@@ -700,29 +701,45 @@ public class ActivityService {
                     new TypeReference<List<Long>>(){}
                 );
                 
+                System.out.println("=== ASSIGNED USERS UPDATE DEBUG ===");
+                System.out.println("Current user (editor) ID: " + currentUserId);
+                System.out.println("Assigned user IDs from frontend: " + assignedUserIds);
+                System.out.println("Current user included in assignment: " + assignedUserIds.contains(currentUserId));
+                
                 Set<User> assignedUsers = new HashSet<>();
                 for (Long userId : assignedUserIds) {
                     User user = userRepository.findById(userId).orElse(null);
                     if (user != null) {
                         assignedUsers.add(user);
+                        System.out.println("Added user to assignment: " + user.getName() + " (ID: " + user.getId() + ")");
                     }
                 }
+                
+                // Set the assigned members as specified by the frontend
                 activity.setAssignedMembers(assignedUsers);
+                System.out.println("Final assigned members count: " + assignedUsers.size());
+                System.out.println("=== END ASSIGNED USERS UPDATE DEBUG ===");
             } catch (Exception e) {
                 System.err.println("Error parsing assigned users: " + e.getMessage());
             }
         }
 
-        // Always ensure the creator is in the assigned members list (for both new assignments and updates)
-        User creator = userRepository.findById(currentUserId)
-                .orElseThrow(() -> new RuntimeException("Creator user not found"));
-        
-        Set<User> assignedMembers = activity.getAssignedMembers();
-        if (assignedMembers == null) {
-            assignedMembers = new HashSet<>();
+        // Update creator subscription preference
+        if (request.getCreatorSubscribed() != null && !request.getCreatorSubscribed().isEmpty()) {
+            try {
+                boolean isCreatorSubscribed = Boolean.parseBoolean(request.getCreatorSubscribed());
+                activity.setCreatorSubscribed(isCreatorSubscribed);
+                System.out.println("Updated creatorSubscribed to: " + isCreatorSubscribed);
+            } catch (Exception e) {
+                System.err.println("Error parsing creatorSubscribed: " + e.getMessage());
+                // Default to false if parsing fails
+                activity.setCreatorSubscribed(false);
+            }
+        } else {
+            // If not provided, default to false (opt-out)
+            activity.setCreatorSubscribed(false);
+            System.out.println("creatorSubscribed not provided, defaulting to false");
         }
-        assignedMembers.add(creator);
-        activity.setAssignedMembers(assignedMembers);
         
         if (request.getAttachmentsToDeleteJson() != null && !request.getAttachmentsToDeleteJson().isEmpty()) {
             try {

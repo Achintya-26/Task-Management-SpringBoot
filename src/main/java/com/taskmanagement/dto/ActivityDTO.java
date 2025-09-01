@@ -10,6 +10,7 @@ public class ActivityDTO {
     private String description;
     private String priority;
     private String status; // Added status field
+    private Boolean creatorSubscribed; // Added creator subscription field
     private LocalDateTime targetDate;
     private Long createdBy;
     private LocalDateTime createdAt;
@@ -53,6 +54,9 @@ public class ActivityDTO {
 
     public String getStatus() { return status; }
     public void setStatus(String status) { this.status = status; }
+
+    public Boolean getCreatorSubscribed() { return creatorSubscribed; }
+    public void setCreatorSubscribed(Boolean creatorSubscribed) { this.creatorSubscribed = creatorSubscribed; }
 
     public LocalDateTime getTargetDate() { return targetDate; }
     public void setTargetDate(LocalDateTime targetDate) { this.targetDate = targetDate; }

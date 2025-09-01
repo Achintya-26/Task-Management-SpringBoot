@@ -110,16 +110,7 @@ public class TeamController {
             for (Long userId : request.getUserIds()) {
                 try {
                     teamService.addMember(teamId, userId, currentUserId);
-                    
-                    // Create notification for user
-                    notificationService.createNotification(
-                        userId,
-                        "Added to Team",
-                        "You have been added to team \"" + team.getName() + "\"",
-                        "info",
-                        teamId,
-                        null
-                    );
+                    // Note: Notification is already sent by teamService.addMember()
                 } catch (Exception error) {
                     if (error.getMessage().contains("already a member")) {
                         continue; // Skip if user is already a member

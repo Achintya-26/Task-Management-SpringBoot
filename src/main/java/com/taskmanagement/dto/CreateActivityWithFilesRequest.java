@@ -11,13 +11,14 @@ public class CreateActivityWithFilesRequest {
     private String assignedUsersJson;
     private String linksJson;
     private MultipartFile[] attachments;
+    private Boolean creatorSubscribed;
 
     // Constructors
     public CreateActivityWithFilesRequest() {}
 
     public CreateActivityWithFilesRequest(String name, String description, String priority, 
                                         Long teamId, String targetDate, String assignedUsersJson, 
-                                        String linksJson, MultipartFile[] attachments) {
+                                        String linksJson, MultipartFile[] attachments, Boolean creatorSubscribed) {
         this.name = name;
         this.description = description;
         this.priority = priority;
@@ -26,6 +27,7 @@ public class CreateActivityWithFilesRequest {
         this.assignedUsersJson = assignedUsersJson;
         this.linksJson = linksJson;
         this.attachments = attachments;
+        this.creatorSubscribed = creatorSubscribed;
     }
 
     // Getters and Setters
@@ -91,5 +93,13 @@ public class CreateActivityWithFilesRequest {
 
     public void setAttachments(MultipartFile[] attachments) {
         this.attachments = attachments;
+    }
+
+    public Boolean getCreatorSubscribed() {
+        return creatorSubscribed;
+    }
+
+    public void setCreatorSubscribed(Boolean creatorSubscribed) {
+        this.creatorSubscribed = creatorSubscribed;
     }
 }

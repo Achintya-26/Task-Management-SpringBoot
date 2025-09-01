@@ -7,6 +7,9 @@ import com.taskmanagement.repository.TeamRepository;
 import com.taskmanagement.repository.UserRepository;
 import com.taskmanagement.repository.ActivityRepository;
 import com.taskmanagement.repository.NotificationRepository;
+import com.taskmanagement.repository.RemarkRepository;
+import com.taskmanagement.repository.ActivityLinkRepository;
+import com.taskmanagement.repository.AttachmentRepository;
 import com.taskmanagement.dto.CreateTeamRequest;
 
 import org.springframework.beans.factory.annotation.Autowired;
@@ -15,6 +18,8 @@ import org.springframework.stereotype.Service;
 import java.util.List;
 import java.util.Optional;
 
+import javax.persistence.EntityManager;
+import javax.persistence.PersistenceContext;
 import javax.transaction.Transactional;
 
 @Service
@@ -33,7 +38,19 @@ public class TeamService {
     private NotificationRepository notificationRepository;
     
     @Autowired
+    private RemarkRepository remarkRepository;
+    
+    @Autowired
+    private ActivityLinkRepository activityLinkRepository;
+    
+    @Autowired
+    private AttachmentRepository attachmentRepository;
+    
+    @Autowired
     private NotificationService notificationService;
+    
+    @PersistenceContext
+    private EntityManager entityManager;
     
     // Note: We'll use a different approach to avoid circular dependency
     // private ActivityService activityService;
@@ -68,10 +85,23 @@ public class TeamService {
         
         // Add initial members if provided
         if (request.getInitialMembers() != null && !request.getInitialMembers().isEmpty()) {
+            // Get the creator user for notifications
+            User creator = userRepository.findById(createdBy).orElse(null);
+            
             for (Long userId : request.getInitialMembers()) {
                 User user = userRepository.findById(userId).orElse(null);
                 if (user != null) {
                     team.getMembers().add(user);
+                    
+                    // Send notification to the added user (only if not the creator)
+                    if (!userId.equals(createdBy)) {
+                        try {
+                            notificationService.notifyUserAddedToTeam(team, user, creator);
+                            System.out.println("Sent team addition notification to user: " + user.getName() + " for team: " + team.getName());
+                        } catch (Exception e) {
+                            System.err.println("Failed to send team addition notification to user " + userId + ": " + e.getMessage());
+                        }
+                    }
                 }
             }
             // Save again with members
@@ -103,16 +133,39 @@ public class TeamService {
             
             // For each activity, we need to clean up its dependencies manually
             for (Activity activity : teamActivities) {
+                System.out.println("Cleaning up dependencies for activity ID: " + activity.getId());
+                
+                // Delete activity links first
+                System.out.println("Deleting activity links for activity ID: " + activity.getId());
+                activityLinkRepository.deleteByActivityId(activity.getId());
+                entityManager.flush();
+                
+                // Delete attachments
+                System.out.println("Deleting attachments for activity ID: " + activity.getId());
+                attachmentRepository.deleteByActivityId(activity.getId());
+                entityManager.flush();
+                
+                // Delete remarks (this was the missing step causing the constraint violation)
+                System.out.println("Deleting remarks for activity ID: " + activity.getId());
+                remarkRepository.deleteByActivityId(activity.getId());
+                entityManager.flush();
+                
                 // Delete notifications related to this activity
+                System.out.println("Deleting notifications for activity ID: " + activity.getId());
                 notificationRepository.deleteByRelatedActivityId(activity.getId());
+                entityManager.flush();
                 
                 // Clear assigned members relationship (many-to-many)
+                System.out.println("Clearing assigned members for activity ID: " + activity.getId());
                 activity.getAssignedMembers().clear();
                 activityRepository.save(activity);
+                entityManager.flush();
             }
             
             // Step 3: Now delete all activities (cascade should handle remarks, attachments, links)
+            System.out.println("Deleting " + teamActivities.size() + " activities for team ID: " + id);
             activityRepository.deleteByTeamId(id);
+            entityManager.flush();
             
             // Step 4: Clear all team member relationships (many-to-many)
             team.getMembers().clear();

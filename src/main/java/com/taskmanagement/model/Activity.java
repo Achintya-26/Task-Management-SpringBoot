@@ -48,6 +48,9 @@ public class Activity {
     @Column(name = "status", nullable = false)
     private ActivityStatus status = ActivityStatus.PENDING;
 
+    @Column(name = "creator_subscribed")
+    private Boolean creatorSubscribed = true; // Default to true for backwards compatibility
+
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "team_id", nullable = false)
     @JsonIgnoreProperties({"hibernateLazyInitializer", "handler", "members", "activities"})
@@ -74,6 +77,10 @@ public class Activity {
     @OneToMany(mappedBy = "activity", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
     @JsonIgnoreProperties({"hibernateLazyInitializer", "handler", "activity"})
     private Set<ActivityLink> links = new HashSet<>();
+    
+    @OneToMany(mappedBy = "activity", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
+    @JsonIgnoreProperties({"hibernateLazyInitializer", "handler", "activity"})
+    private Set<Remark> remarks = new HashSet<>();
     
     public enum ActivityStatus {
         PENDING("pending"),
@@ -128,13 +135,13 @@ public class Activity {
         }
     }
 
-    public ActivityStatus getStatus() {
-		return status;
-	}
-
-	public void setStatus(ActivityStatus status) {
-		this.status = status;
-	}
+//    public ActivityStatus getStatus() {
+//		return status;
+//	}
+//
+//	public void setStatus(ActivityStatus status) {
+//		this.status = status;
+//	}
 
 	@PreUpdate
     protected void onUpdate() {
@@ -244,5 +251,29 @@ public class Activity {
 
     public void setLinks(Set<ActivityLink> links) {
         this.links = links;
+    }
+
+    public Set<Remark> getRemarks() {
+        return remarks;
+    }
+
+    public void setRemarks(Set<Remark> remarks) {
+        this.remarks = remarks;
+    }
+
+    public ActivityStatus getStatus() {
+        return status;
+    }
+
+    public void setStatus(ActivityStatus status) {
+        this.status = status;
+    }
+
+    public Boolean getCreatorSubscribed() {
+        return creatorSubscribed;
+    }
+
+    public void setCreatorSubscribed(Boolean creatorSubscribed) {
+        this.creatorSubscribed = creatorSubscribed;
     }
 }
